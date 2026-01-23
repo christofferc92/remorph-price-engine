@@ -2,12 +2,8 @@ import { mapOutcomeToEstimatorInputs } from "../estimator/outcomeMapper.ts";
 import type { IntentMap } from "../estimator/scopeCompiler.ts";
 import type { AnalysisResult, EstimateResponse, Selection } from "../estimator/estimator.ts";
 import { estimate } from "../estimator/estimator.ts";
-import {
-  bucketToArea,
-  CanonicalEstimatorContract,
-  SizeBucket,
-  WET_ZONE_FRACTIONS,
-} from "../../../src/shared/canonicalEstimatorContract.ts";
+import { bucketToArea, WET_ZONE_FRACTIONS } from "../../../src/shared/canonicalEstimatorContract.ts";
+import type { CanonicalEstimatorContract, SizeBucket } from "../../../src/shared/canonicalEstimatorContract.ts";
 
 const DEFAULT_CEILING_HEIGHT = 2.4;
 
@@ -572,6 +568,111 @@ export function computeOutlierFlags(profile: SweepProfile, estimateResult: any) 
   return { outlier_flags: outlier, info_flags: info };
 }
 
+type ConfidenceTier = "low" | "medium" | "high";
+
+const CONFIDENCE_TIERS: ConfidenceTier[] = ["low", "medium", "high"];
+const QUALITY_TIER_MAP: Record<string, ConfidenceTier> = {
+  confirmed: "high",
+  semi_confirmed: "medium",
+  rough: "low",
+};
+const BLOCKING_NEEDS = new Set(["NC-001", "NC-002", "NC-003", "NC-004"]);
+
+const ROT_RATE = clampNumber(parseEnvNumber(process.env.ROT_RATE, 0.3), 0, 1);
+const ROT_MAX_DEDUCTION = parseEnvNumber(process.env.ROT_MAX_SEK, Infinity);
+
+function parseEnvNumber(value: string | undefined, fallback: number) {
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return fallback;
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
+}
+
+function deriveConfidenceTier(input: {
+  estimate_quality?: string;
+  analysis_confidence?: number | null;
+  image_quality?: { sufficient_for_estimate: boolean } | null;
+  needs_confirmation_ids?: string[] | null;
+  warnings?: string[] | null;
+  info_flags?: string[] | null;
+  outlier_flags?: string[] | null;
+}) {
+  const baseQuality = input.estimate_quality ? input.estimate_quality : "rough";
+  const baseTier = QUALITY_TIER_MAP[baseQuality] ?? "low";
+  let tierIndex = CONFIDENCE_TIERS.indexOf(baseTier);
+  if (tierIndex === -1) tierIndex = 0;
+
+  const reasons = new Set<string>();
+  const analysisLow = typeof input.analysis_confidence === "number" && input.analysis_confidence < 0.6;
+  const imageInsufficient = Boolean(input.image_quality && input.image_quality.sufficient_for_estimate === false);
+  if (analysisLow) {
+    reasons.add("low_analysis_confidence");
+  }
+  if (imageInsufficient) {
+    reasons.add("insufficient_image_quality");
+  }
+  if ((analysisLow || imageInsufficient) && tierIndex > 0) {
+    tierIndex -= 1;
+  }
+
+  const needs = input.needs_confirmation_ids || [];
+  const hasBlockingNeeds = needs.some((id) => BLOCKING_NEEDS.has(id));
+  if (hasBlockingNeeds && tierIndex > 0) {
+    tierIndex -= 1;
+    reasons.add("needs_confirmation_blocking");
+  } else if (hasBlockingNeeds) {
+    reasons.add("needs_confirmation_blocking");
+  }
+
+  const hasWarnings =
+    (input.warnings && input.warnings.length > 0) ||
+    (input.outlier_flags && input.outlier_flags.length > 0) ||
+    (input.info_flags && input.info_flags.length > 0);
+  if (hasWarnings) {
+    reasons.add("has_warnings_outliers");
+  }
+
+  return {
+    confidence_tier: CONFIDENCE_TIERS[tierIndex],
+    confidence_reasons: Array.from(reasons),
+  };
+}
+
+function computeRotSummary(
+  lineItems: Array<{ labor_sek: number; rot_eligible?: boolean }>,
+  totals: { grand_total_sek?: number } | undefined
+) {
+  const rotEligibleLabor = lineItems.reduce(
+    (sum, item) => sum + (item.rot_eligible ? Math.round(Number(item.labor_sek ?? 0)) : 0),
+    0
+  );
+  const rawDeduction = Math.round(rotEligibleLabor * ROT_RATE);
+  const cappedDeduction =
+    Number.isFinite(ROT_MAX_DEDUCTION) && ROT_MAX_DEDUCTION >= 0 ? Math.min(rawDeduction, ROT_MAX_DEDUCTION) : rawDeduction;
+  const capApplied = Number.isFinite(ROT_MAX_DEDUCTION) && rawDeduction > ROT_MAX_DEDUCTION;
+  const grandTotal = Math.round(totals?.grand_total_sek ?? 0);
+  const deduction = capApplied ? cappedDeduction : rawDeduction;
+  const totalAfterRot = Math.max(grandTotal - deduction, 0);
+  return {
+    rot_rate: ROT_RATE,
+    rot_eligible_labor_sek: rotEligibleLabor,
+    rot_deduction_sek: deduction,
+    total_after_rot_sek: totalAfterRot,
+    rot_cap_applied: capApplied,
+    rot_cap_reason: capApplied ? "rot_max_limit" : "unknown_user_tax_limit",
+    rot_cap_sek: Number.isFinite(ROT_MAX_DEDUCTION) ? ROT_MAX_DEDUCTION : undefined,
+  };
+}
+
 export function buildFrontendEstimate(
   estimateResult: any,
   normalized: any,
@@ -592,10 +693,36 @@ export function buildFrontendEstimate(
     material_sek: Number(task.material_sek ?? 0),
     subtotal_sek: Number(task.subtotal_sek ?? 0),
     note: task.note ? String(task.note) : undefined,
+    rot_eligible: Boolean(task.rot_eligible),
   }));
   const derivedAreas =
     estimateResult.derived_areas || normalized?.derived_areas || { non_tiled_wall_area_m2: null };
   const needs = estimateResult.needs_confirmation_ids || normalized?.needs_confirmation_ids || [];
+  const toIntegerValue = (value: number | null | undefined) =>
+    typeof value === "number" && Number.isFinite(value) ? Math.round(value) : null;
+  const estimateRange = {
+    low_sek: toIntegerValue(estimateResult.estimate_low_sek),
+    mid_sek: toIntegerValue(estimateResult.estimate_mid_sek),
+    high_sek: toIntegerValue(estimateResult.estimate_high_sek),
+  };
+  const laborRange = {
+    min_sek: toIntegerValue(estimateResult.totals?.labor_min_sek),
+    max_sek: toIntegerValue(estimateResult.totals?.labor_max_sek),
+  };
+  const materialRange = {
+    min_sek: toIntegerValue(estimateResult.totals?.material_min_sek),
+    max_sek: toIntegerValue(estimateResult.totals?.material_max_sek),
+  };
+  const { confidence_tier, confidence_reasons } = deriveConfidenceTier({
+    estimate_quality: estimateResult.estimate_quality,
+    analysis_confidence: normalized?.analysis?.analysis_confidence,
+    image_quality: normalized?.analysis?.image_quality,
+    needs_confirmation_ids: estimateResult.needs_confirmation_ids || needs,
+    warnings: estimateResult.warnings,
+    info_flags: flags?.info_flags,
+    outlier_flags: flags?.outlier_flags,
+  });
+  const rot_summary = computeRotSummary(line_items, estimateResult.totals);
   return {
     line_items,
     totals,
@@ -610,6 +737,13 @@ export function buildFrontendEstimate(
     },
     plausibility_band: estimateResult.plausibility_band || "",
     sek_per_m2: typeof estimateResult.sek_per_m2 === "number" ? estimateResult.sek_per_m2 : null,
+    estimate_quality: estimateResult.estimate_quality ?? normalized?.estimate_quality ?? "rough",
+    estimate_range: estimateRange,
+    labor_range: laborRange,
+    material_range: materialRange,
+    confidence_tier,
+    confidence_reasons,
+    rot_summary,
   };
 }
 

@@ -116,9 +116,12 @@ When canonical parsing fails, the server tries to adapt the payload as normalize
 Every success returns `{ id, estimate, metadata, record }` (see `apps/price-engine-service/src/server.ts:252-266`).
 - `id` is a UUID or timestamp-based fallback from `createResultId()` (`server.ts:218-221`).
 - `estimate` is the result of `buildFrontendEstimate` (`packages/price-engine/src/contract.ts:535-574`) and includes:
-  - `line_items[]`: each entry mirrors rate-card tasks with `key`, `trade_group`, `qty`, `unit`, `labor_sek`, `material_sek`, `subtotal_sek`, and optional `note` for floor/wall finish details (`contract.ts:535-573`).
+  - `line_items[]`: each entry mirrors rate-card tasks with `key`, `trade_group`, `qty`, `unit`, `labor_sek`, `material_sek`, `subtotal_sek`, `rot_eligible`, and optional `note` for floor/wall finish details (`contract.ts:575-606`).
   - `totals`: base subtotal + project management (from `rateCard.overhead.project_management_pct`) + contingency (8% by default).
   - `trade_group_totals`, `flags`, `info_flags` (outlier metadata), `assumptions`, `warnings`, `needs_confirmation_ids`, `derived_areas` (`non_tiled_wall_area_m2`), `plausibility_band`, and `sek_per_m2` (all coming from the estimator pipeline, see `packages/price-engine/src/contract.ts:411-574`).
+  - `estimate_quality` / `estimate_range` / `labor_range` / `material_range` mirror the ranges computed in `runEstimateFromNormalized`, so the UI has low/mid/high totals plus labor/material swings without recomputing (`contract.ts:426-516`).
+  - `confidence_tier` / `confidence_reasons` distill estimate quality, AI/image confidence, blocking needs, and warnings into a single server-side “truth” (`contract.ts:520-614`).
+  - `rot_summary` reports ROT-eligible labor sums and the deduction (with an optional cap trace) while leaving the estimator totals untouched (`contract.ts:575-614`).
   - There is no explicit confidence range or probability envelope—the response relies on `sek_per_m2`, `plausibility_band`, and `warnings` instead (“not returned today”).
 - `metadata` includes the normalized contract that was processed plus `overrides`, `text`, and `fileCount` placeholders (always `text = ""`, `fileCount = 0`).
 - `record` is currently always `null`.
@@ -136,7 +139,8 @@ Every success returns `{ id, estimate, metadata, record }` (see `apps/price-engi
         "unit": "m2",
         "labor_sek": 2600,
         "material_sek": 0,
-        "subtotal_sek": 2600
+        "subtotal_sek": 2600,
+        "rot_eligible": true
       },
       {
         "key": "install_floor_tiles_or_vinyl",
@@ -146,7 +150,8 @@ Every success returns `{ id, estimate, metadata, record }` (see `apps/price-engi
         "labor_sek": 2800,
         "material_sek": 1120,
         "subtotal_sek": 3920,
-        "note": "ceramic_tile_standard"
+        "note": "ceramic_tile_standard",
+        "rot_eligible": true
       },
       {
         "key": "install_toilet",
@@ -155,7 +160,8 @@ Every success returns `{ id, estimate, metadata, record }` (see `apps/price-engi
         "unit": "pcs",
         "labor_sek": 1500,
         "material_sek": 6400,
-        "subtotal_sek": 7900
+        "subtotal_sek": 7900,
+        "rot_eligible": true
       }
     ],
     "totals": {
@@ -179,7 +185,31 @@ Every success returns `{ id, estimate, metadata, record }` (see `apps/price-engi
     "needs_confirmation_ids": [],
     "derived_areas": {"non_tiled_wall_area_m2": 0},
     "plausibility_band": "PB-003",
-    "sek_per_m2": 44245.40
+    "sek_per_m2": 44245.40,
+    "estimate_quality": "confirmed",
+    "estimate_range": {
+      "low_sek": 140000,
+      "mid_sek": 155000,
+      "high_sek": 170000
+    },
+    "labor_range": {
+      "min_sek": 55000,
+      "max_sek": 65000
+    },
+    "material_range": {
+      "min_sek": 45000,
+      "max_sek": 52000
+    },
+    "confidence_tier": "high",
+    "confidence_reasons": ["has_warnings_outliers"],
+    "rot_summary": {
+      "rot_rate": 0.3,
+      "rot_eligible_labor_sek": 62000,
+      "rot_deduction_sek": 18600,
+      "total_after_rot_sek": 131400,
+      "rot_cap_applied": false,
+      "rot_cap_reason": "unknown_user_tax_limit"
+    }
   },
   "metadata": {
     "contract": "<canonical contract payload omitted>",
@@ -190,6 +220,12 @@ Every success returns `{ id, estimate, metadata, record }` (see `apps/price-engi
   "record": null
 }
 ```
+
+The `estimate` payload now guarantees:
+- `estimate_range` (low/mid/high totals) plus the labor/material swings computed in `runEstimateFromNormalized`.
+- `confidence_tier`/`confidence_reasons` where the base tier follows `estimate_quality` and downgrades once per signal (low analysis confidence, insufficient image quality, blocking NC codes, or warnings/outliers).
+- `rot_summary` including `rot_eligible_labor_sek`, `rot_deduction_sek` (Math.round), and `total_after_rot_sek = max(0, grand_total_sek - rot_deduction_sek)`, so the UI can highlight ROT savings without touching the estimator math.
+- `line_items[].rot_eligible` flags each catalog entry so that the ROT deduction only counts eligible labor; missing flags default to `false`.
 
 The real response includes many more `line_items` (see the sample run output in the repository), but the structure above reflects the keys and totals that always appear.
 

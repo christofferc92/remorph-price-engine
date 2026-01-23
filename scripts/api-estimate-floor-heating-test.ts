@@ -68,6 +68,62 @@ async function runTest() {
     );
   }
 
+  const estimate = res._getJSONData()?.estimate;
+  if (!estimate) {
+    throw new Error("Response missing estimate payload");
+  }
+  const assertInteger = (value: unknown, label: string) => {
+    if (typeof value !== "number" || !Number.isInteger(value)) {
+      throw new Error(`Expected integer for ${label}, got ${value}`);
+    }
+  };
+
+  if (!estimate.estimate_quality) {
+    throw new Error("Missing estimate_quality");
+  }
+  if (!estimate.estimate_range) {
+    throw new Error("Missing estimate_range");
+  }
+  assertInteger(estimate.estimate_range.low_sek, "estimate_range.low_sek");
+  assertInteger(estimate.estimate_range.mid_sek, "estimate_range.mid_sek");
+  assertInteger(estimate.estimate_range.high_sek, "estimate_range.high_sek");
+  assertInteger(estimate.labor_range?.min_sek, "labor_range.min_sek");
+  assertInteger(estimate.labor_range?.max_sek, "labor_range.max_sek");
+  assertInteger(estimate.material_range?.min_sek, "material_range.min_sek");
+  assertInteger(estimate.material_range?.max_sek, "material_range.max_sek");
+  if (!estimate.confidence_tier) {
+    throw new Error("Missing confidence_tier");
+  }
+  if (!Array.isArray(estimate.confidence_reasons)) {
+    throw new Error("Missing confidence_reasons");
+  }
+  if (!Array.isArray(estimate.line_items)) {
+    throw new Error("line_items missing");
+  }
+  if (!estimate.rot_summary) {
+    throw new Error("rot_summary missing");
+  }
+  if (!estimate.line_items.some((item) => typeof item.rot_eligible === "boolean")) {
+    throw new Error("line_items missing rot_eligible flag");
+  }
+  const eligibleLabor = estimate.line_items
+    .filter((item) => item.rot_eligible)
+    .reduce((sum, item) => sum + Math.round(item.labor_sek ?? 0), 0);
+  if (eligibleLabor !== estimate.rot_summary.rot_eligible_labor_sek) {
+    throw new Error("rot_summary.rot_eligible_labor_sek seems off");
+  }
+  if (!Number.isInteger(estimate.rot_summary.rot_deduction_sek)) {
+    throw new Error("rot_summary.rot_deduction_sek must be integer");
+  }
+  if (!Number.isInteger(estimate.rot_summary.total_after_rot_sek)) {
+    throw new Error("rot_summary.total_after_rot_sek must be integer");
+  }
+  const expectedAfterRot =
+    Math.max(Math.round(estimate.totals?.grand_total_sek ?? 0) - estimate.rot_summary.rot_deduction_sek, 0);
+  if (expectedAfterRot !== estimate.rot_summary.total_after_rot_sek) {
+    throw new Error("rot_summary.total_after_rot_sek mismatch");
+  }
+
   console.log("POST /api/estimate accepted canonical payload with floor_heating.");
   console.log("Response id:", res._getJSONData()?.id);
 }

@@ -21,6 +21,7 @@ export type ScopeRule = {
 export type CatalogTask = {
   task_key: string;
   trade_group: string;
+  rot_eligible?: boolean;
 };
 
 export type RateCard = {

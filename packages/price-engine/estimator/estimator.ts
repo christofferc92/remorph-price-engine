@@ -64,6 +64,7 @@ export type TaskLine = {
   material_sek: number;
   subtotal_sek: number;
   note?: string;
+  rot_eligible: boolean;
 };
 
 export type EstimateResponse = {
@@ -336,6 +337,7 @@ function buildTasks({
       labor_sek: round(rate.labor_sek_per_unit),
       material_sek: round(rate.material_sek_per_unit),
       subtotal_sek: round(subtotal),
+      rot_eligible: true,
     });
     wallHungAllowanceAdded = true;
   };
@@ -365,6 +367,7 @@ function buildTasks({
       labor_sek: round(rate.labor_sek_per_unit),
       material_sek: round(rate.material_sek_per_unit),
       subtotal_sek: round(subtotal),
+      rot_eligible: true,
     });
     ceilingPanelsAllowanceAdded = true;
   };
@@ -382,6 +385,7 @@ function buildTasks({
       labor_sek: round(rate.labor_sek_per_unit),
       material_sek: round(rate.material_sek_per_unit),
       subtotal_sek: round(subtotal),
+      rot_eligible: true,
     });
     ceilingSlopedAllowanceAdded = true;
   };
@@ -412,6 +416,7 @@ function buildTasks({
       labor_sek: round(showerNicheCount * rate.labor_sek_per_unit),
       material_sek: round(showerNicheCount * rate.material_sek_per_unit),
       subtotal_sek: round(subtotal),
+      rot_eligible: true,
     });
     showerNicheAllowanceAdded = true;
   };
@@ -505,6 +510,7 @@ function buildTasks({
       material_sek: round(qty * materialPerUnit),
       subtotal_sek: round(subtotal),
       note: deriveTaskNote(task.task_key, selections),
+      rot_eligible: Boolean(task.rot_eligible),
     });
 
     if (task.task_key === "install_toilet") {

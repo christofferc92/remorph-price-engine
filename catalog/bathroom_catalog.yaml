@@ -154,248 +154,296 @@ scope_rules:
     set_flags: [requires_permit_docs]
     source_ids: ["DR-019", "DR-020"]
 
+# ROT guidance: labor-intensive, on-site renovation tasks (demo, tiling, plumbing, electrical, painting, cleanup, layout allowances) are rot-eligible; administrative/permit/doc tasks remain false. Missing `rot_eligible` defaults to `false`.
 tasks:
   - task_key: demolish_remove_floor_tiles
     trade_group: demolition
+    rot_eligible: true
     qty_driver: floor_area_m2
     qty_rules_source_ids: ["QD-010"]
     source_ids: ["TK-DEM-001"]
   - task_key: demolish_remove_wall_tiles
     trade_group: demolition
+    rot_eligible: true
     qty_driver: wall_area_m2
     qty_rules_source_ids: ["QD-010"]
     source_ids: ["TK-DEM-001"]
   - task_key: demolish_remove_old_fixtures
     trade_group: demolition
+    rot_eligible: true
     qty_driver: fixture_count
     qty_rules_source_ids: ["QD-010"]
     source_ids: ["TK-DEM-001"]
   - task_key: demolish_chase_for_pipes
     trade_group: demolition
+    rot_eligible: true
     qty_driver: complexity_hourly
     qty_rules_source_ids: ["QD-010"]
     source_ids: ["TK-DEM-001"]
 
   - task_key: install_wall_backer_boards
     trade_group: carpentry_substrate
+    rot_eligible: true
     qty_driver: wall_area_m2_or_boards
     qty_rules_source_ids: ["QD-005"]
     source_ids: ["TK-SUB-001"]
   - task_key: repair_patch_walls
     trade_group: carpentry_substrate
+    rot_eligible: true
     qty_driver: wall_area_m2
     qty_rules_source_ids: ["QD-005"]
     source_ids: ["TK-SUB-001"]
   - task_key: level_floor_screed
     trade_group: carpentry_substrate
+    rot_eligible: true
     qty_driver: floor_area_m2_and_depth
     qty_rules_source_ids: ["QD-005"]
     source_ids: ["TK-SUB-001"]
   - task_key: construct_support_structures
     trade_group: carpentry_substrate
+    rot_eligible: true
     qty_driver: items_or_hourly
     qty_rules_source_ids: ["QD-005", "AX-012"]
     source_ids: ["TK-SUB-001"]
 
   - task_key: apply_waterproof_membrane_floor
     trade_group: waterproofing
+    rot_eligible: true
     qty_driver: floor_area_m2
     qty_rules_source_ids: ["QD-001"]
     source_ids: ["TK-WP-001"]
   - task_key: apply_waterproof_membrane_walls
     trade_group: waterproofing
+    rot_eligible: true
     qty_driver: wet_zone_wall_area_m2
     qty_rules_source_ids: ["QD-003"]
     source_ids: ["TK-WP-001", "NC-002"]
   - task_key: waterproofing_detailing_corners
     trade_group: waterproofing
+    rot_eligible: true
     qty_driver: penetrations_and_corners
     qty_rules_source_ids: ["QD-003"]
     source_ids: ["TK-WP-001"]
 
   - task_key: install_floor_tiles_or_vinyl
     trade_group: tiling_or_vinyl
+    rot_eligible: true
     qty_driver: floor_area_m2
     qty_rules_source_ids: ["QD-001", "QD-002"]
     source_ids: ["TK-TILE-001", "AX-001", "AX-002", "AX-003", "AX-004"]
   - task_key: install_floor_microcement
     trade_group: tiling_or_vinyl
+    rot_eligible: true
     qty_driver: floor_area_m2
     qty_rules_source_ids: ["QD-001", "QD-002"]
     source_ids: ["TK-TILE-001", "AX-001", "AX-002", "AX-003", "AX-004"]
   - task_key: install_wall_tiles
     trade_group: tiling_or_vinyl
+    rot_eligible: true
     qty_driver: wet_zone_wall_area_m2
     qty_rules_source_ids: ["QD-003", "QD-004"]
     source_ids: ["TK-TILE-001", "AX-005", "AX-006", "AX-007", "AX-008"]
   - task_key: grout_and_seal
     trade_group: tiling_or_vinyl
+    rot_eligible: true
     qty_driver: areas_and_edges
     qty_rules_source_ids: ["QD-001", "QD-003"]
     source_ids: ["TK-TILE-001"]
   - task_key: demolition_layout_change_allowance
     trade_group: demolition
+    rot_eligible: true
     qty_driver: fixed_item
     qty_rules_source_ids: ["QD-010"]
     source_ids: ["TK-DEM-002"]
   - task_key: plumbing_layout_change_reroute_allowance
     trade_group: plumbing
+    rot_eligible: true
     qty_driver: fixed_item
     qty_rules_source_ids: ["QD-010"]
     source_ids: ["TK-PL-010"]
   - task_key: substrate_layout_change_allowance
     trade_group: carpentry_substrate
+    rot_eligible: true
     qty_driver: fixed_item
     qty_rules_source_ids: ["QD-005"]
     source_ids: ["TK-SUB-010"]
   - task_key: documentation_layout_change_allowance
     trade_group: project_management_docs
+    rot_eligible: false
     qty_driver: fixed_item
     qty_rules_source_ids: ["QD-019"]
     source_ids: ["TK-PM-010"]
   - task_key: layout_change_area_allowance
     trade_group: demolition
+    rot_eligible: true
     qty_driver: floor_area_m2
     qty_rules_source_ids: ["LAYOUT-001"]
     source_ids: ["TK-DEM-003"]
   - task_key: layout_change_fixture_allowance
     trade_group: plumbing
+    rot_eligible: true
     qty_driver: fixture_count
     qty_rules_source_ids: ["LAYOUT-002"]
     source_ids: ["TK-PL-011"]
   - task_key: layout_change_wet_zone_allowance
     trade_group: carpentry_substrate
+    rot_eligible: true
     qty_driver: wet_zone_wall_area_m2
     qty_rules_source_ids: ["LAYOUT-003"]
     source_ids: ["TK-SUB-011"]
   - task_key: install_shower_screen
     trade_group: tiling_or_vinyl
+    rot_eligible: true
     qty_driver: item_count
     qty_rules_source_ids: []
     source_ids: ["TK-TILE-001"]
 
   - task_key: rough_in_new_piping
     trade_group: plumbing
+    rot_eligible: true
     qty_driver: hourly_or_meters
     qty_rules_source_ids: ["QD-006"]
     source_ids: ["TK-PL-001"]
   - task_key: replace_floor_drain
     trade_group: plumbing
+    rot_eligible: true
     qty_driver: fixed_item
     qty_rules_source_ids: ["QD-006", "SRC-001"]
     source_ids: ["TK-PL-001"]
   - task_key: install_toilet
     trade_group: plumbing
+    rot_eligible: true
     qty_driver: fixture_count
     qty_rules_source_ids: ["QD-006", "AX-012"]
     source_ids: ["TK-PL-001"]
   - task_key: install_sink_and_faucet
     trade_group: plumbing
+    rot_eligible: true
     qty_driver: fixture_count
     qty_rules_source_ids: ["QD-006"]
     source_ids: ["TK-PL-001"]
   - task_key: install_shower_fixture
     trade_group: plumbing
+    rot_eligible: true
     qty_driver: fixture_count
     qty_rules_source_ids: ["QD-006", "AX-012"]
     source_ids: ["TK-PL-001"]
   - task_key: pressure_test_plumbing
     trade_group: plumbing
+    rot_eligible: true
     qty_driver: fixed_item
     qty_rules_source_ids: ["QD-006"]
     source_ids: ["TK-PL-001"]
 
   - task_key: install_floor_heating_cable
     trade_group: electrical
+    rot_eligible: true
     qty_driver: heated_floor_area_m2
     qty_rules_source_ids: ["QD-007"]
     source_ids: ["TK-EL-001"]
   - task_key: install_light_fixtures
     trade_group: electrical
+    rot_eligible: true
     qty_driver: electrical_points
     qty_rules_source_ids: ["QD-007"]
     source_ids: ["TK-EL-001"]
   - task_key: install_electrical_outlets
     trade_group: electrical
+    rot_eligible: true
     qty_driver: electrical_points
     qty_rules_source_ids: ["QD-007"]
     source_ids: ["TK-EL-001"]
   - task_key: upgrade_electrical_safety
     trade_group: electrical
+    rot_eligible: true
     qty_driver: fixed_item_or_points
     qty_rules_source_ids: ["QD-007", "DR-010"]
     source_ids: ["TK-EL-001"]
   - task_key: final_electrical_inspection
     trade_group: electrical
+    rot_eligible: true
     qty_driver: fixed_item
     qty_rules_source_ids: ["QD-007"]
     source_ids: ["TK-EL-001"]
 
   - task_key: install_exhaust_fan
     trade_group: ventilation
+    rot_eligible: true
     qty_driver: fixed_item
     qty_rules_source_ids: ["QD-008"]
     source_ids: ["TK-VNT-001"]
   - task_key: duct_adjustment_sealing
     trade_group: ventilation
+    rot_eligible: true
     qty_driver: fixed_item
     qty_rules_source_ids: ["QD-008"]
     source_ids: ["TK-VNT-001"]
 
   - task_key: prep_and_paint_ceiling
     trade_group: painting
+    rot_eligible: true
     qty_driver: ceiling_area_m2_or_half_day
     qty_rules_source_ids: ["QD-009"]
     source_ids: ["TK-PNT-001"]
   - task_key: paint_trim_and_door
     trade_group: painting
+    rot_eligible: true
     qty_driver: fixed_item_or_area
     qty_rules_source_ids: ["QD-009"]
     source_ids: ["TK-PNT-001"]
   - task_key: finish_wall_paint
     trade_group: painting
+    rot_eligible: true
     qty_driver: non_tiled_wall_area_m2
     qty_rules_source_ids: ["QD-009", "AX-009"]
     source_ids: ["TK-PNT-001"]
 
   - task_key: protect_other_areas
     trade_group: cleanup_waste
+    rot_eligible: true
     qty_driver: fixed_item
     qty_rules_source_ids: ["QD-010"]
     source_ids: ["TK-CLN-001"]
   - task_key: remove_construction_debris
     trade_group: cleanup_waste
+    rot_eligible: true
     qty_driver: fixed_item_or_loads
     qty_rules_source_ids: ["QD-010"]
     source_ids: ["TK-CLN-001"]
   - task_key: construction_waste_disposal
     trade_group: cleanup_waste
+    rot_eligible: true
     qty_driver: fixed_item
     qty_rules_source_ids: ["QD-010"]
     source_ids: ["TK-CLN-001"]
   - task_key: final_cleanup
     trade_group: cleanup_waste
+    rot_eligible: true
     qty_driver: fixed_item
     qty_rules_source_ids: ["QD-010"]
     source_ids: ["TK-CLN-001"]
 
   - task_key: project_coordination_fee
     trade_group: project_management_docs
+    rot_eligible: false
     qty_driver: percent_or_hours
     qty_rules_source_ids: ["QD-011"]
     source_ids: ["TK-PM-001"]
   - task_key: permit_or_board_application
     trade_group: project_management_docs
+    rot_eligible: false
     qty_driver: fixed_item
     qty_rules_source_ids: ["QD-011"]
     source_ids: ["TK-PM-001"]
   - task_key: issue_wetroom_certificate
     trade_group: project_management_docs
+    rot_eligible: false
     qty_driver: fixed_item
     qty_rules_source_ids: ["QD-011", "DR-020"]
     source_ids: ["TK-PM-001"]
   - task_key: handover_inspection
     trade_group: project_management_docs
+    rot_eligible: false
     qty_driver: fixed_item
     qty_rules_source_ids: ["QD-011"]
     source_ids: ["TK-PM-001"]

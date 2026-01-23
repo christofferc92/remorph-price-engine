@@ -1,0 +1,634 @@
+import { mapOutcomeToEstimatorInputs } from "../estimator/outcomeMapper.ts";
+import type { IntentMap } from "../estimator/scopeCompiler.ts";
+import type { AnalysisResult, EstimateResponse, Selection } from "../estimator/estimator.ts";
+import { estimate } from "../estimator/estimator.ts";
+import {
+  bucketToArea,
+  CanonicalEstimatorContract,
+  SizeBucket,
+  WET_ZONE_FRACTIONS,
+} from "../../../src/shared/canonicalEstimatorContract.ts";
+
+const DEFAULT_CEILING_HEIGHT = 2.4;
+
+export type SweepProfile = "refresh" | "full_rebuild" | "major";
+
+type MeasurementKey = "floor_area_m2" | "wall_area_m2" | "ceiling_area_m2" | "wet_zone_wall_area_m2";
+
+export function bucketFromFloorArea(area: number | null | undefined): SizeBucket {
+  if (typeof area === "number" && !Number.isNaN(area)) {
+    if (area < 4) return "under_4_sqm";
+    if (area <= 7) return "between_4_and_7_sqm";
+    return "over_7_sqm";
+  }
+  return "between_4_and_7_sqm";
+}
+
+const SIZE_BUCKET_MAP: Record<"small" | "medium" | "large", SizeBucket> = {
+  small: "under_4_sqm",
+  medium: "between_4_and_7_sqm",
+  large: "over_7_sqm",
+};
+
+const SIZE_BUCKET_CHOICE_MAP = {
+  under_4m2: "under_4_sqm",
+  "4_7m2": "between_4_and_7_sqm",
+  over_7m2: "over_7_sqm",
+} as const;
+type SizeBucketChoice = keyof typeof SIZE_BUCKET_CHOICE_MAP;
+
+function sizeBucketFromChoice(choice: unknown): SizeBucket | null {
+  if (typeof choice !== "string") return null;
+  return SIZE_BUCKET_CHOICE_MAP[choice as SizeBucketChoice] ?? null;
+}
+
+function resolveSizeBucket(
+  area: number | null | undefined,
+  choice: unknown,
+  probBucket: SizeBucket | null
+): SizeBucket {
+  if (typeof area === "number" && Number.isFinite(area) && area > 0) {
+    return bucketFromFloorArea(area);
+  }
+  const choiceBucket = sizeBucketFromChoice(choice);
+  if (choiceBucket) return choiceBucket;
+  if (probBucket) return probBucket;
+  return "between_4_and_7_sqm";
+}
+
+export function computeDetectedFixtures(raw: any) {
+  return {
+    shower_present: typeof raw?.shower === "number" && raw.shower > 0,
+    bathtub_present: typeof raw?.bathtub === "number" && raw.bathtub > 0,
+    toilet_present: typeof raw?.toilet === "number" && raw.toilet > 0,
+    sink_present: typeof raw?.sink === "number" && raw.sink > 0,
+  };
+}
+
+export function computeAnalysisContract(
+  ai_raw: any,
+  accepted: boolean,
+  warnings: string[],
+  detectedFixtures: {
+    shower_present: boolean;
+    bathtub_present: boolean;
+    toilet_present: boolean;
+    sink_present: boolean;
+  }
+): { contract: CanonicalEstimatorContract["analysis"]; placeholders: string[] } {
+  const sizeProbInfo = analyzeSizeBucketProbs(ai_raw.size_bucket_probs);
+  const sizeBucket = resolveSizeBucket(ai_raw.floor_area_m2, ai_raw.size_bucket_choice, sizeProbInfo.bucket);
+  const sizeBucketConfidence = clamp01(
+    typeof ai_raw.size_bucket_confidence === "number" ? ai_raw.size_bucket_confidence : sizeProbInfo.maxProb
+  );
+  const analysisConfidence = clamp01(ai_raw.confidence_scale);
+  const overallCondition: CanonicalEstimatorContract["analysis"]["condition_signals"]["overall_condition"] =
+    accepted === true && warnings.length === 0
+      ? "good"
+      : warnings.length > 0
+      ? "average"
+      : "unknown";
+  const placeholders = new Set<string>();
+  const addPlaceholder = (value: string) => placeholders.add(value);
+  if (ai_raw.walls_fully_tiled == null) addPlaceholder("layout_features.wet_room_layout");
+  addPlaceholder("layout_features.tight_space");
+  addPlaceholder("layout_features.irregular_geometry");
+  if (ai_raw.ceiling_visible == null) addPlaceholder("ceiling_features.ceiling_visible");
+  if (ai_raw.sloped_ceiling_detected == null) addPlaceholder("ceiling_features.sloped_ceiling_detected");
+  if (typeof accepted !== "boolean") addPlaceholder("image_quality.sufficient_for_estimate");
+
+  const contract: CanonicalEstimatorContract["analysis"] = {
+    room_type: (ai_raw.room_type as "bathroom" | "other") ?? "bathroom",
+    bathroom_size_estimate: sizeBucket,
+    bathroom_size_confidence: sizeBucketConfidence,
+    detected_fixtures: detectedFixtures,
+    layout_features: {
+      shower_zone_visible: detectedFixtures.shower_present,
+      wet_room_layout: false,
+      tight_space: sizeBucket === "under_4_sqm",
+      irregular_geometry: false,
+    },
+    ceiling_features: {
+      ceiling_visible: typeof ai_raw.ceiling_visible === "boolean" ? ai_raw.ceiling_visible : false,
+      sloped_ceiling_detected:
+        typeof ai_raw.sloped_ceiling_detected === "boolean" ? ai_raw.sloped_ceiling_detected : false,
+    },
+    condition_signals: {
+      overall_condition: overallCondition,
+    },
+    image_quality: {
+      sufficient_for_estimate: typeof accepted === "boolean" ? accepted : true,
+      issues: [],
+    },
+    analysis_confidence: analysisConfidence,
+  };
+
+  return { contract, placeholders: Array.from(placeholders) };
+}
+
+function analyzeSizeBucketProbs(probs: any) {
+  if (!probs || typeof probs !== "object") return { bucket: null, maxProb: 0 };
+  const entries: Array<["small" | "medium" | "large", number]> = [
+    ["small", typeof probs.small === "number" ? probs.small : -1],
+    ["medium", typeof probs.medium === "number" ? probs.medium : -1],
+    ["large", typeof probs.large === "number" ? probs.large : -1],
+  ];
+  entries.sort((a, b) => b[1] - a[1]);
+  const [label, value] = entries[0];
+  const bucket = value >= 0 ? SIZE_BUCKET_MAP[label] : null;
+  const maxProb = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : 0;
+  return { bucket, maxProb };
+}
+
+function deriveRoomDimensions(floorArea: number, wallArea: number, ceilingHeight: number) {
+  if (floorArea <= 0 || wallArea <= 0 || ceilingHeight <= 0) {
+    const guess = Math.sqrt(Math.max(floorArea, 0.1));
+    return { length: guess, width: guess };
+  }
+  const perimeter = wallArea / ceilingHeight;
+  const sumOfSides = perimeter / 2;
+  if (sumOfSides <= 0) {
+    const guess = Math.sqrt(floorArea);
+    return { length: guess, width: guess };
+  }
+  const discriminant = sumOfSides * sumOfSides - 4 * floorArea;
+  if (discriminant < 0) {
+    const guess = Math.sqrt(floorArea);
+    return { length: guess, width: guess };
+  }
+  const sqrtDelta = Math.sqrt(discriminant);
+  const length = (sumOfSides + sqrtDelta) / 2;
+  const width = (sumOfSides - sqrtDelta) / 2;
+  if (length <= 0 || width <= 0) {
+    const guess = Math.sqrt(floorArea);
+    return { length: guess, width: guess };
+  }
+  return { length, width };
+}
+
+function buildRoomFromContract(contract: CanonicalEstimatorContract, imageId?: string) {
+  const overrides = contract.measurementOverride;
+  const aiRoom = contract.roomMeasurements;
+  const baseFloorArea = aiRoom?.floor_area_m2 ?? bucketToArea(contract.overrides.bathroom_size_final);
+  const baseWallArea = aiRoom?.wall_area_m2 ?? baseFloorArea * 4;
+  const aiWetZone = aiRoom?.wet_zone_wall_area_m2 ?? Math.min(baseWallArea, baseWallArea * 0.85);
+  const height = overrides?.ceilingHeight ?? DEFAULT_CEILING_HEIGHT;
+  const overrideLength = overrides?.length;
+  const overrideWidth = overrides?.width;
+  const areaFromLengthWidth =
+    overrideLength != null && overrideWidth != null ? overrideLength * overrideWidth : null;
+  let floorArea = overrides?.area ?? areaFromLengthWidth ?? baseFloorArea;
+  if (floorArea <= 0) floorArea = baseFloorArea;
+  const derived = deriveRoomDimensions(floorArea, baseWallArea, height);
+  const length = overrideLength ?? derived.length;
+  const width = overrideWidth ?? derived.width;
+  const wallArea = Math.max(2 * (length + width) * height, 0);
+  const ceilingArea = Math.max(floorArea, 0);
+  const wetZoneFraction =
+    overrides?.wetZone != null ? WET_ZONE_FRACTIONS[overrides.wetZone] ?? 0.25 : undefined;
+  let wetZoneArea =
+    wetZoneFraction != null ? wallArea * wetZoneFraction : aiWetZone;
+  if (wetZoneArea > wallArea) {
+    wetZoneArea = wallArea;
+  }
+  if (wetZoneArea < 0) {
+    wetZoneArea = 0;
+  }
+  const fixtures = contract.analysis.detected_fixtures;
+  return {
+    image_id: imageId,
+    room_type: contract.analysis.room_type,
+    confidence_room_type: contract.analysis.analysis_confidence,
+    floor_area_m2: floorArea,
+    wall_area_m2: wallArea,
+    ceiling_area_m2: ceilingArea,
+    wet_zone_wall_area_m2: wetZoneArea,
+    estimated_dimensions_notes_sv: "",
+    visible_fixtures: {
+      toilet: fixtures.toilet_present ? 1 : 0,
+      sink: fixtures.sink_present ? 1 : 0,
+      shower: fixtures.shower_present ? 1 : 0,
+      bathtub: fixtures.bathtub_present ? 1 : 0,
+    },
+    assumptions_sv: [],
+    building_year: null,
+  };
+}
+
+function buildRangesFromBucket(bucket: SizeBucket) {
+  const area = bucketToArea(bucket);
+  const buildRange = (value: number) => ({
+    low: value * 0.9,
+    mid: value,
+    high: value * 1.1,
+  });
+  const floor = buildRange(area);
+  const wall = buildRange(area * 4);
+  const ceiling = buildRange(area);
+  const wet = buildRange(Math.min(area * 4, area * 3.5));
+  return {
+    floor_area_m2: floor,
+    wall_area_m2: wall,
+    ceiling_area_m2: ceiling,
+    wet_zone_wall_area_m2: wet,
+  };
+}
+
+export function buildNormalizedFromContract(
+  contract: CanonicalEstimatorContract,
+  imageId?: string,
+  mapperResult?: ReturnType<typeof mapOutcomeToEstimatorInputs>
+) {
+  const room = buildRoomFromContract(contract, imageId);
+  let targetWetZone = room.wet_zone_wall_area_m2;
+  if (["tiles_all_walls", "large_format_tiles_all_walls"].includes(contract.outcome.wall_finish)) {
+    targetWetZone = room.wall_area_m2;
+  }
+  targetWetZone = Math.min(targetWetZone, room.wall_area_m2);
+  room.wet_zone_wall_area_m2 = targetWetZone;
+  const { intents, selections } = mapperResult || mapOutcomeToEstimatorInputs(contract.outcome);
+  const needs = computeNeeds(room, intents, selections, []);
+  const derived_areas = {
+    non_tiled_wall_area_m2: computeNonTiled(room, selections),
+  };
+  const measurementSources: Partial<Record<MeasurementKey, "ai" | "user">> = {};
+  const overrideMeasurements = contract.measurementOverride;
+  if (
+    overrideMeasurements?.area != null ||
+    (overrideMeasurements?.length != null && overrideMeasurements?.width != null)
+  ) {
+    measurementSources.floor_area_m2 = "user";
+  } else if (contract.roomMeasurements?.floor_area_m2 != null) {
+    measurementSources.floor_area_m2 = "ai";
+  }
+  if (overrideMeasurements?.length != null && overrideMeasurements?.width != null) {
+    measurementSources.wall_area_m2 = "user";
+  } else if (contract.roomMeasurements?.wall_area_m2 != null) {
+    measurementSources.wall_area_m2 = "ai";
+  }
+  if (overrideMeasurements?.length != null && overrideMeasurements?.width != null) {
+    measurementSources.ceiling_area_m2 = "user";
+  } else if (contract.roomMeasurements?.ceiling_area_m2 != null) {
+    measurementSources.ceiling_area_m2 = "ai";
+  }
+  if (overrideMeasurements?.ceilingHeight != null) {
+    measurementSources.ceiling_area_m2 = "user";
+  }
+  if (overrideMeasurements?.wetZone) {
+    measurementSources.wet_zone_wall_area_m2 = "user";
+  } else if (contract.roomMeasurements?.wet_zone_wall_area_m2 != null) {
+    measurementSources.wet_zone_wall_area_m2 = "ai";
+  }
+  const inputs = computeInputs(
+    {
+      floor_area_m2: room.floor_area_m2,
+      wall_area_m2: room.wall_area_m2,
+      ceiling_area_m2: room.ceiling_area_m2,
+      wet_zone_wall_area_m2: room.wet_zone_wall_area_m2,
+    },
+    contract.analysis.analysis_confidence,
+    measurementSources
+  );
+  const analysisWithVisible = {
+    ...contract.analysis,
+    visible_fixtures: room.visible_fixtures,
+  };
+  const ranges = buildRangesFromBucket(contract.overrides.bathroom_size_final);
+  const estimate_quality = computeEstimateQuality(inputs, needs);
+  return {
+    image_id: imageId,
+    accepted: true,
+    warnings: [],
+    needs_confirmation_ids: needs,
+    analysis: analysisWithVisible,
+    overrides: contract.overrides,
+    room,
+    intents,
+    selections,
+    derived_areas,
+    inputs,
+    inferred_ranges: ranges,
+    estimate_quality,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+export function determineProfileFromOutcome(outcome: CanonicalEstimatorContract["outcome"]): SweepProfile {
+  if (outcome.layout_change === "yes") return "major";
+  const hasShowerChange = outcome.shower_type !== "no_shower" && outcome.shower_type !== "keep";
+  if (hasShowerChange || outcome.bathtub === "yes") return "full_rebuild";
+  return "refresh";
+}
+
+export function computeNeeds(room: any, intents: IntentMap, selections: Selection, modelNeeds: string[] = []): string[] {
+  const needs = new Set<string>(modelNeeds || []);
+  const wallFinishTiled = isTiledOrVinyl(selections.wall_finish);
+  if (!room.floor_area_m2 || room.floor_area_m2 <= 0) needs.add("NC-001");
+  const wetMissing = room.wet_zone_wall_area_m2 == null;
+  if (wetMissing) needs.add("NC-002");
+  else if (wallFinishTiled && room.wall_area_m2 != null && room.wet_zone_wall_area_m2 < room.wall_area_m2 - 0.5) needs.add("NC-002");
+  if (intents.change_layout) needs.add("NC-003");
+  if (room.building_year != null && room.building_year < 1980) needs.add("NC-004");
+  if (intents.add_underfloor_heating && !intents.change_floor_finish) needs.add("NC-005");
+  return Array.from(needs).sort();
+}
+
+export function computeNonTiled(room: any, selections: Selection) {
+  if (!isTiledOrVinyl(selections.wall_finish)) return null;
+  if (room.wall_area_m2 == null || room.wet_zone_wall_area_m2 == null) return null;
+  return Math.max(0, room.wall_area_m2 - room.wet_zone_wall_area_m2);
+}
+
+function isTiledOrVinyl(finish: Selection["wall_finish"]) {
+  return finish === "wetroom_vinyl" || finish === "ceramic_tile_standard" || finish === "ceramic_tile_premium";
+}
+
+export function computeInputs(
+  values: Record<MeasurementKey, number | null | undefined>,
+  confidenceScale: number | null | undefined,
+  sources?: Partial<Record<MeasurementKey, "ai" | "user">>
+) {
+  const confidence = clamp01(confidenceScale, 0.5);
+  const makeField = (key: MeasurementKey) => {
+    const value = values[key];
+    const overrideSource = sources?.[key];
+    return {
+      value: value != null ? value : null,
+      source: overrideSource ?? (value != null ? "ai" : "default"),
+      confidence,
+    };
+  };
+  return {
+    floor_area_m2: makeField("floor_area_m2"),
+    wall_area_m2: makeField("wall_area_m2"),
+    ceiling_area_m2: makeField("ceiling_area_m2"),
+    wet_zone_wall_area_m2: makeField("wet_zone_wall_area_m2"),
+  };
+}
+
+function clamp01(value: number | null | undefined, fallback: number) {
+  if (typeof value !== "number" || Number.isNaN(value)) return fallback;
+  return Math.min(Math.max(value, 0), 1);
+}
+
+export function computeEstimateQuality(inputs: any, needs: string[]): "confirmed" | "semi_confirmed" | "rough" {
+  const hasFloor = inputs.floor_area_m2?.value != null;
+  const hasWet = inputs.wet_zone_wall_area_m2?.value != null;
+  const blocking = getBlockingIds(needs);
+  if (hasFloor && hasWet && blocking.length === 0) return "confirmed";
+  if (hasFloor) return "semi_confirmed";
+  return "rough";
+}
+
+export function getBlockingIds(needs: string[]): string[] {
+  return needs.filter((id) => ["NC-001", "NC-002", "NC-003", "NC-004"].includes(id));
+}
+
+function pickScenario(value: number | null | undefined, range: any, key: "low" | "mid" | "high") {
+  if (typeof value === "number" && !Number.isNaN(value)) return value;
+  if (range && typeof range[key] === "number") return range[key];
+  return null;
+}
+
+function pickTotals(est: any) {
+  return est
+    ? {
+        totals: est.totals,
+      }
+    : { totals: { base_subtotal_sek: 0, project_management_sek: 0, contingency_sek: 0, grand_total_sek: 0 } };
+}
+
+function safeNumber(value: number | null | undefined, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function summarizeLaborMaterialFromEstimate(est?: EstimateResponse) {
+  const tasks = est?.tasks ?? [];
+  let labor = 0;
+  let material = 0;
+  for (const task of tasks) {
+    labor += Number.isFinite(task.labor_sek) ? task.labor_sek : 0;
+    material += Number.isFinite(task.material_sek) ? task.material_sek : 0;
+  }
+  return { labor, material };
+}
+
+function enforceMonotonicEstimates(low: number | null | undefined, mid: number | null | undefined, high: number | null | undefined) {
+  const vals = [low, mid, high].filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  if (vals.length === 0) return { low: low ?? null, mid: mid ?? null, high: high ?? null };
+  const minVal = Math.min(...vals);
+  const maxVal = Math.max(...vals);
+  const midCandidate = typeof mid === "number" && Number.isFinite(mid) ? mid : (minVal + maxVal) / 2;
+  const midClamped = Math.min(Math.max(midCandidate, minVal), maxVal);
+  return { low: minVal, mid: midClamped, high: maxVal };
+}
+
+export function runEstimateFromNormalized(normalized: any, profile?: SweepProfile) {
+  const scenarios = ["low", "mid", "high"] as const;
+  const ranges = normalized.inferred_ranges || {};
+  const inputs = normalized.inputs || {};
+
+  const estimates: Record<string, EstimateResponse> = {} as Record<string, EstimateResponse>;
+  let midSekPerM2: number | null = null;
+
+  for (const key of scenarios) {
+    const floor = pickScenario(inputs?.floor_area_m2?.value, ranges.floor_area_m2, key);
+    const wall = pickScenario(inputs?.wall_area_m2?.value, ranges.wall_area_m2, key);
+    const ceiling = pickScenario(inputs?.ceiling_area_m2?.value, ranges.ceiling_area_m2 || ranges.floor_area_m2, key);
+    const wet = pickScenario(inputs?.wet_zone_wall_area_m2?.value, ranges.wet_zone_wall_area_m2, key);
+
+    const analysis: AnalysisResult = {
+      room_type: normalized.room.room_type,
+      confidence_room_type: normalized.room.confidence_room_type,
+      floor_area_m2: floor,
+      wall_area_m2: wall,
+      ceiling_area_m2: ceiling,
+      wet_zone_wall_area_m2: wet,
+      estimated_dimensions_notes_sv: normalized.room.estimated_dimensions_notes_sv || "",
+      visible_fixtures: normalized.room.visible_fixtures || {},
+      suggested_intents: normalized.intents,
+      needs_confirmation_ids: normalized.needs_confirmation_ids || [],
+      assumptions_sv: normalized.room.assumptions_sv || [],
+      building_year: normalized.room.building_year,
+    } as AnalysisResult;
+
+    const est = estimate({
+      analysis,
+      overrides: {},
+      intents: normalized.intents,
+      selections: normalized.selections,
+      profile,
+    });
+    (estimates as any)[key] = est;
+    if (key === "mid") midSekPerM2 = est.sek_per_m2;
+  }
+
+  const monotonicTotals = enforceMonotonicEstimates(
+    estimates.low?.totals?.grand_total_sek,
+    estimates.mid?.totals?.grand_total_sek,
+    estimates.high?.totals?.grand_total_sek
+  );
+
+  const lowLaborMaterial = summarizeLaborMaterialFromEstimate(estimates.low);
+  const midLaborMaterial = summarizeLaborMaterialFromEstimate(estimates.mid);
+  const highLaborMaterial = summarizeLaborMaterialFromEstimate(estimates.high);
+  const laborValues = [lowLaborMaterial.labor, midLaborMaterial.labor, highLaborMaterial.labor].map((value) =>
+    safeNumber(value)
+  );
+  const materialValues = [lowLaborMaterial.material, midLaborMaterial.material, highLaborMaterial.material].map((value) =>
+    safeNumber(value)
+  );
+  const totalsFromMid = estimates.mid?.totals ?? {
+    base_subtotal_sek: 0,
+    project_management_sek: 0,
+    contingency_sek: 0,
+    grand_total_sek: 0,
+  };
+  const totalsWithBreakdown = {
+    ...totalsFromMid,
+    min_total_sek: safeNumber(monotonicTotals.low),
+    max_total_sek: safeNumber(monotonicTotals.high),
+    labor_min_sek: Math.min(...laborValues),
+    labor_max_sek: Math.max(...laborValues),
+    material_min_sek: Math.min(...materialValues),
+    material_max_sek: Math.max(...materialValues),
+  };
+
+  return {
+    estimate_range: {
+      low: pickTotals(estimates.low),
+      mid: pickTotals(estimates.mid),
+      high: pickTotals(estimates.high),
+    },
+    estimate_low_sek: monotonicTotals.low,
+    estimate_mid_sek: monotonicTotals.mid,
+    estimate_high_sek: monotonicTotals.high,
+    estimate_quality: normalized.estimate_quality || "rough",
+    needs_confirmation_ids: normalized.needs_confirmation_ids,
+    warnings: estimates.mid?.warnings || [],
+    tasks: estimates.mid?.tasks || [],
+    flags: estimates.mid?.flags || [],
+    trade_group_totals: estimates.mid?.trade_group_totals || [],
+    plausibility_band: estimates.mid?.plausibility_band || "",
+    sek_per_m2: midSekPerM2,
+    derived_areas: estimates.mid?.derived_areas || normalized.derived_areas,
+    totals: totalsWithBreakdown,
+  } as any;
+}
+
+export function computeOutlierFlags(profile: SweepProfile, estimateResult: any) {
+  const outlier: string[] = [];
+  const info: string[] = [];
+  const quality = estimateResult.estimate_quality || "rough";
+  const mid = estimateResult.estimate_mid_sek ?? estimateResult.totals?.grand_total_sek;
+  const perM2 = estimateResult.sek_per_m2 ?? null;
+  const ensureInfoFlag = (code: string) => {
+    if (!info.includes(code)) {
+      info.push(code);
+    }
+  };
+
+  const bands =
+    quality === "rough"
+      ? {
+          refresh: [15000, 80000],
+          full_rebuild: [70000, 200000],
+          major: [130000, 320000],
+        }
+      : {
+          refresh: [20000, 60000],
+          full_rebuild: [80000, 180000],
+          major: [150000, 300000],
+        };
+
+  if (profile === "refresh" && mid != null) {
+    const [lo, hi] = bands.refresh;
+    if (!(mid >= lo && mid <= hi)) outlier.push("REFRESH_OUT_OF_BAND");
+  }
+  if (profile === "full_rebuild" && mid != null) {
+    const [lo, hi] = bands.full_rebuild;
+    if (!(mid >= lo && mid <= hi)) outlier.push("FULL_OUT_OF_BAND");
+    const perM2Thresh = quality === "rough" ? 35000 : 30000;
+    if (perM2 && perM2 > perM2Thresh) {
+      if (quality === "rough") info.push("FULL_PER_M2_TOO_HIGH");
+      else outlier.push("FULL_PER_M2_TOO_HIGH");
+    }
+  }
+  if (profile === "major" && mid != null) {
+    const [lo, hi] = bands.major;
+    if (!(mid >= lo && mid <= hi)) outlier.push("MAJOR_OUT_OF_BAND");
+    const perM2Thresh = quality === "rough" ? 50000 : 45000;
+    if (perM2 && perM2 > perM2Thresh) {
+      if (quality === "rough") info.push("MAJOR_PER_M2_TOO_HIGH");
+      else outlier.push("MAJOR_PER_M2_TOO_HIGH");
+    }
+  }
+  const band = estimateResult.plausibility_band;
+  if (band === "PB-002") {
+    ensureInfoFlag("PLAUSIBILITY_BAND_PB_002");
+  } else if (band === "PB-003") {
+    ensureInfoFlag("PLAUSIBILITY_BAND_PB_003");
+  }
+  return { outlier_flags: outlier, info_flags: info };
+}
+
+export function buildFrontendEstimate(
+  estimateResult: any,
+  normalized: any,
+  flags: { outlier_flags: string[]; info_flags: string[] }
+) {
+  const totals = estimateResult.totals || {
+    base_subtotal_sek: 0,
+    project_management_sek: 0,
+    contingency_sek: 0,
+    grand_total_sek: 0,
+  };
+  const line_items = (estimateResult.tasks || []).map((task: any, index: number) => ({
+    key: String(task.task_key ?? task.key ?? `line-${index}`),
+    trade_group: String(task.trade_group ?? ""),
+    qty: Number(task.qty ?? 0),
+    unit: String(task.unit ?? ""),
+    labor_sek: Number(task.labor_sek ?? 0),
+    material_sek: Number(task.material_sek ?? 0),
+    subtotal_sek: Number(task.subtotal_sek ?? 0),
+    note: task.note ? String(task.note) : undefined,
+  }));
+  const derivedAreas =
+    estimateResult.derived_areas || normalized?.derived_areas || { non_tiled_wall_area_m2: null };
+  const needs = estimateResult.needs_confirmation_ids || normalized?.needs_confirmation_ids || [];
+  return {
+    line_items,
+    totals,
+    trade_group_totals: estimateResult.trade_group_totals || [],
+    flags: estimateResult.flags || [],
+    info_flags: flags?.info_flags || [],
+    assumptions: normalized?.room?.assumptions_sv || [],
+    warnings: estimateResult.warnings || [],
+    needs_confirmation_ids: needs,
+    derived_areas: {
+      non_tiled_wall_area_m2: derivedAreas?.non_tiled_wall_area_m2 ?? null,
+    },
+    plausibility_band: estimateResult.plausibility_band || "",
+    sek_per_m2: typeof estimateResult.sek_per_m2 === "number" ? estimateResult.sek_per_m2 : null,
+  };
+}
+
+export function evaluateContract(
+  contract: CanonicalEstimatorContract,
+  options?: { imageId?: string; profile?: SweepProfile }
+) {
+  const mapperResult = mapOutcomeToEstimatorInputs(contract.outcome);
+  const normalized = buildNormalizedFromContract(contract, options?.imageId, mapperResult);
+  const profile = options?.profile ?? determineProfileFromOutcome(contract.outcome);
+  const estimateResult = runEstimateFromNormalized(normalized, profile);
+  const flags = computeOutlierFlags(profile, estimateResult);
+  const clientEstimate = buildFrontendEstimate(estimateResult, normalized, flags);
+  return {
+    normalized,
+    estimateResult,
+    clientEstimate,
+    flags,
+    profile,
+    mappingLog: mapperResult.mappingLog,
+  };
+}

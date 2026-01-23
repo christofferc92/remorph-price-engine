@@ -1,0 +1,405 @@
+derived_flags:
+  - id: requires_demolition
+    source_ids: ["DR-001", "DR-014", "DR-017", "TK-DEM-001"]
+  - id: requires_substrate_prep
+    source_ids: ["DR-001", "DR-014", "TK-SUB-001"]
+  - id: requires_waterproofing
+    source_ids: ["DR-001", "DR-014", "DR-019", "DR-020", "TK-WP-001"]
+  - id: requires_tiler
+    source_ids: ["DR-001", "DR-014", "TK-TILE-001", "AX-003", "AX-004", "AX-007", "AX-008"]
+  - id: requires_flooring_installer
+    source_ids: ["TK-TILE-001", "AX-002", "AX-006"]
+  - id: requires_plumber
+    source_ids: ["DR-001", "DR-007", "DR-008", "DR-014", "TK-PL-001"]
+  - id: requires_electrician
+    source_ids: ["DR-004", "DR-009", "DR-010", "DR-011", "DR-012", "TK-EL-001"]
+  - id: requires_ventilation
+    source_ids: ["DR-012", "DR-013", "TK-VNT-001"]
+  - id: requires_painter
+    source_ids: ["DR-016", "TK-PNT-001"]
+  - id: requires_cleanup
+    source_ids: ["DR-017", "TK-CLN-001"]
+  - id: requires_project_management
+    source_ids: ["DR-018", "TK-PM-001"]
+  - id: requires_permit_docs
+    source_ids: ["DR-014", "DR-019", "DR-020", "TK-PM-001"]
+
+intents:
+  - id: change_floor_finish
+    label_sv: "Nytt golv (kakel eller våtrumsmatta)"
+    help_sv: "Byt golvbeläggning, t.ex. kakel eller våtrumsmatta"
+    keywords_sv: ["golv", "kakel", "klinker", "plastmatta", "nytt golv"]
+    defaulting: on
+    source_ids: ["UI-001"]
+  - id: change_wall_finish
+    label_sv: "Nya väggytor (kakel i våtrum)"
+    help_sv: "Byt väggbeklädnad, t.ex. kakel eller våtrumsskiva"
+    keywords_sv: ["vägg", "kakla", "våtrumstapet", "väggmatta", "måla vägg"]
+    defaulting: on
+    source_ids: ["UI-002"]
+  - id: add_underfloor_heating
+    label_sv: "Installera golvvärme"
+    help_sv: "Lägg in golvvärme under golvet (komfortvärme)"
+    keywords_sv: ["golvvärme", "värmegolv", "värmeslingor"]
+    defaulting: off
+    source_ids: ["UI-003", "DR-004", "DR-005", "DR-006", "NC-005"]
+  - id: replace_toilet
+    label_sv: "Byta toalettstol"
+    help_sv: "Installera en ny WC-stol"
+    keywords_sv: ["toalett", "WC", "porslin", "byta toalett"]
+    defaulting: on
+    source_ids: ["UI-004", "DR-007"]
+  - id: replace_sink_vanity
+    label_sv: "Byta handfat/kommod"
+    help_sv: "Installera nytt tvättställ med kommod"
+    keywords_sv: ["handfat", "tvättställ", "kommod", "badrumsmöbel"]
+    defaulting: on
+    source_ids: ["UI-005", "DR-007"]
+  - id: replace_shower
+    label_sv: "Ny dusch/blandare"
+    help_sv: "Byt duscharmatur eller duschkabin"
+    keywords_sv: ["dusch", "duschkabin", "duschset", "blandare", "duschvägg"]
+    defaulting: on
+    source_ids: ["UI-006", "DR-007"]
+  - id: add_bathtub
+    label_sv: "Installera badkar"
+    help_sv: "Montera ett nytt badkar (om sådant önskas)"
+    keywords_sv: ["badkar", "bad", "sätta in badkar"]
+    defaulting: off
+    source_ids: ["UI-007", "DR-007"]
+  - id: update_lighting
+    label_sv: "Förbättra belysning"
+    help_sv: "Installera nya lampor/spots i badrummet"
+    keywords_sv: ["belysning", "spotlights", "taklampa", "lampor"]
+    defaulting: off
+    source_ids: ["UI-008", "DR-009", "DR-010", "DR-011"]
+  - id: improve_ventilation
+    label_sv: "Förbättra ventilation"
+    help_sv: "Installera eller uppgradera badrumsfläkt"
+    keywords_sv: ["ventilation", "fläkt", "frånluft", "fukt"]
+    defaulting: off
+    source_ids: ["UI-009", "DR-012", "DR-013"]
+  - id: change_layout
+    label_sv: "Ändra planlösning (flytta avlopp)"
+    help_sv: "Flytta golvbrunn eller VVS, ändra placering av toalett/dusch"
+    keywords_sv: ["flytta", "ändra planlösning", "flytta toalett", "flytta golvbrunn"]
+    defaulting: off
+    source_ids: ["UI-010", "DR-014", "DR-015", "NC-003"]
+  - id: paint_ceiling
+    label_sv: "Måla om tak/list"
+    help_sv: "Måla badrumstak och lister för en fräsch finish"
+    keywords_sv: ["måla", "takfärg", "måla tak", "lister"]
+    defaulting: on
+    source_ids: ["UI-011", "DR-016"]
+
+scope_rules:
+  - id: rule_surfaces_trigger_full_wetroom_scope
+    if_any_intents: ["change_floor_finish", "change_wall_finish"]
+    set_flags:
+      - requires_demolition
+      - requires_substrate_prep
+      - requires_waterproofing
+      - requires_tiler
+      - requires_plumber
+    source_ids: ["DR-001", "DR-002", "DR-003"]
+
+  - id: rule_underfloor_heating_requires_electrician
+    if_any_intents: ["add_underfloor_heating"]
+    set_flags: [requires_electrician]
+    source_ids: ["DR-004", "DR-005", "DR-006"]
+
+  - id: rule_fixtures_require_plumber
+    if_any_intents: ["replace_toilet", "replace_sink_vanity", "replace_shower", "add_bathtub"]
+    set_flags: [requires_plumber]
+    source_ids: ["DR-007", "DR-008"]
+
+  - id: rule_lighting_requires_electrician
+    if_any_intents: ["update_lighting"]
+    set_flags: [requires_electrician]
+    source_ids: ["DR-009", "DR-010", "DR-011"]
+
+  - id: rule_ventilation_requires_ventilation_and_electrician
+    if_any_intents: ["improve_ventilation"]
+    set_flags: [requires_ventilation, requires_electrician]
+    source_ids: ["DR-012", "DR-013"]
+
+  - id: rule_layout_change_is_major
+    if_any_intents: ["change_layout"]
+    set_flags:
+      - requires_demolition
+      - requires_substrate_prep
+      - requires_waterproofing
+      - requires_tiler
+      - requires_plumber
+      - requires_permit_docs
+    source_ids: ["DR-014", "DR-015"]
+
+  - id: rule_painting
+    if_any_intents: ["paint_ceiling"]
+    set_flags: [requires_painter]
+    source_ids: ["DR-016"]
+
+  - id: rule_cleanup_if_demo_or_fixture_removal
+    if_any_flags: [requires_demolition]
+    set_flags: [requires_cleanup]
+    source_ids: ["DR-017"]
+
+  - id: rule_project_management_if_multiple_trades
+    if_all_flags: [requires_tiler, requires_plumber, requires_electrician]
+    set_flags: [requires_project_management]
+    source_ids: ["DR-018"]
+
+  - id: rule_docs_if_waterproofing_or_layout
+    if_any_flags: [requires_waterproofing, requires_permit_docs]
+    set_flags: [requires_permit_docs]
+    source_ids: ["DR-019", "DR-020"]
+
+tasks:
+  - task_key: demolish_remove_floor_tiles
+    trade_group: demolition
+    qty_driver: floor_area_m2
+    qty_rules_source_ids: ["QD-010"]
+    source_ids: ["TK-DEM-001"]
+  - task_key: demolish_remove_wall_tiles
+    trade_group: demolition
+    qty_driver: wall_area_m2
+    qty_rules_source_ids: ["QD-010"]
+    source_ids: ["TK-DEM-001"]
+  - task_key: demolish_remove_old_fixtures
+    trade_group: demolition
+    qty_driver: fixture_count
+    qty_rules_source_ids: ["QD-010"]
+    source_ids: ["TK-DEM-001"]
+  - task_key: demolish_chase_for_pipes
+    trade_group: demolition
+    qty_driver: complexity_hourly
+    qty_rules_source_ids: ["QD-010"]
+    source_ids: ["TK-DEM-001"]
+
+  - task_key: install_wall_backer_boards
+    trade_group: carpentry_substrate
+    qty_driver: wall_area_m2_or_boards
+    qty_rules_source_ids: ["QD-005"]
+    source_ids: ["TK-SUB-001"]
+  - task_key: repair_patch_walls
+    trade_group: carpentry_substrate
+    qty_driver: wall_area_m2
+    qty_rules_source_ids: ["QD-005"]
+    source_ids: ["TK-SUB-001"]
+  - task_key: level_floor_screed
+    trade_group: carpentry_substrate
+    qty_driver: floor_area_m2_and_depth
+    qty_rules_source_ids: ["QD-005"]
+    source_ids: ["TK-SUB-001"]
+  - task_key: construct_support_structures
+    trade_group: carpentry_substrate
+    qty_driver: items_or_hourly
+    qty_rules_source_ids: ["QD-005", "AX-012"]
+    source_ids: ["TK-SUB-001"]
+
+  - task_key: apply_waterproof_membrane_floor
+    trade_group: waterproofing
+    qty_driver: floor_area_m2
+    qty_rules_source_ids: ["QD-001"]
+    source_ids: ["TK-WP-001"]
+  - task_key: apply_waterproof_membrane_walls
+    trade_group: waterproofing
+    qty_driver: wet_zone_wall_area_m2
+    qty_rules_source_ids: ["QD-003"]
+    source_ids: ["TK-WP-001", "NC-002"]
+  - task_key: waterproofing_detailing_corners
+    trade_group: waterproofing
+    qty_driver: penetrations_and_corners
+    qty_rules_source_ids: ["QD-003"]
+    source_ids: ["TK-WP-001"]
+
+  - task_key: install_floor_tiles_or_vinyl
+    trade_group: tiling_or_vinyl
+    qty_driver: floor_area_m2
+    qty_rules_source_ids: ["QD-001", "QD-002"]
+    source_ids: ["TK-TILE-001", "AX-001", "AX-002", "AX-003", "AX-004"]
+  - task_key: install_floor_microcement
+    trade_group: tiling_or_vinyl
+    qty_driver: floor_area_m2
+    qty_rules_source_ids: ["QD-001", "QD-002"]
+    source_ids: ["TK-TILE-001", "AX-001", "AX-002", "AX-003", "AX-004"]
+  - task_key: install_wall_tiles
+    trade_group: tiling_or_vinyl
+    qty_driver: wet_zone_wall_area_m2
+    qty_rules_source_ids: ["QD-003", "QD-004"]
+    source_ids: ["TK-TILE-001", "AX-005", "AX-006", "AX-007", "AX-008"]
+  - task_key: grout_and_seal
+    trade_group: tiling_or_vinyl
+    qty_driver: areas_and_edges
+    qty_rules_source_ids: ["QD-001", "QD-003"]
+    source_ids: ["TK-TILE-001"]
+  - task_key: demolition_layout_change_allowance
+    trade_group: demolition
+    qty_driver: fixed_item
+    qty_rules_source_ids: ["QD-010"]
+    source_ids: ["TK-DEM-002"]
+  - task_key: plumbing_layout_change_reroute_allowance
+    trade_group: plumbing
+    qty_driver: fixed_item
+    qty_rules_source_ids: ["QD-010"]
+    source_ids: ["TK-PL-010"]
+  - task_key: substrate_layout_change_allowance
+    trade_group: carpentry_substrate
+    qty_driver: fixed_item
+    qty_rules_source_ids: ["QD-005"]
+    source_ids: ["TK-SUB-010"]
+  - task_key: documentation_layout_change_allowance
+    trade_group: project_management_docs
+    qty_driver: fixed_item
+    qty_rules_source_ids: ["QD-019"]
+    source_ids: ["TK-PM-010"]
+  - task_key: layout_change_area_allowance
+    trade_group: demolition
+    qty_driver: floor_area_m2
+    qty_rules_source_ids: ["LAYOUT-001"]
+    source_ids: ["TK-DEM-003"]
+  - task_key: layout_change_fixture_allowance
+    trade_group: plumbing
+    qty_driver: fixture_count
+    qty_rules_source_ids: ["LAYOUT-002"]
+    source_ids: ["TK-PL-011"]
+  - task_key: layout_change_wet_zone_allowance
+    trade_group: carpentry_substrate
+    qty_driver: wet_zone_wall_area_m2
+    qty_rules_source_ids: ["LAYOUT-003"]
+    source_ids: ["TK-SUB-011"]
+  - task_key: install_shower_screen
+    trade_group: tiling_or_vinyl
+    qty_driver: item_count
+    qty_rules_source_ids: []
+    source_ids: ["TK-TILE-001"]
+
+  - task_key: rough_in_new_piping
+    trade_group: plumbing
+    qty_driver: hourly_or_meters
+    qty_rules_source_ids: ["QD-006"]
+    source_ids: ["TK-PL-001"]
+  - task_key: replace_floor_drain
+    trade_group: plumbing
+    qty_driver: fixed_item
+    qty_rules_source_ids: ["QD-006", "SRC-001"]
+    source_ids: ["TK-PL-001"]
+  - task_key: install_toilet
+    trade_group: plumbing
+    qty_driver: fixture_count
+    qty_rules_source_ids: ["QD-006", "AX-012"]
+    source_ids: ["TK-PL-001"]
+  - task_key: install_sink_and_faucet
+    trade_group: plumbing
+    qty_driver: fixture_count
+    qty_rules_source_ids: ["QD-006"]
+    source_ids: ["TK-PL-001"]
+  - task_key: install_shower_fixture
+    trade_group: plumbing
+    qty_driver: fixture_count
+    qty_rules_source_ids: ["QD-006", "AX-012"]
+    source_ids: ["TK-PL-001"]
+  - task_key: pressure_test_plumbing
+    trade_group: plumbing
+    qty_driver: fixed_item
+    qty_rules_source_ids: ["QD-006"]
+    source_ids: ["TK-PL-001"]
+
+  - task_key: install_floor_heating_cable
+    trade_group: electrical
+    qty_driver: heated_floor_area_m2
+    qty_rules_source_ids: ["QD-007"]
+    source_ids: ["TK-EL-001"]
+  - task_key: install_light_fixtures
+    trade_group: electrical
+    qty_driver: electrical_points
+    qty_rules_source_ids: ["QD-007"]
+    source_ids: ["TK-EL-001"]
+  - task_key: install_electrical_outlets
+    trade_group: electrical
+    qty_driver: electrical_points
+    qty_rules_source_ids: ["QD-007"]
+    source_ids: ["TK-EL-001"]
+  - task_key: upgrade_electrical_safety
+    trade_group: electrical
+    qty_driver: fixed_item_or_points
+    qty_rules_source_ids: ["QD-007", "DR-010"]
+    source_ids: ["TK-EL-001"]
+  - task_key: final_electrical_inspection
+    trade_group: electrical
+    qty_driver: fixed_item
+    qty_rules_source_ids: ["QD-007"]
+    source_ids: ["TK-EL-001"]
+
+  - task_key: install_exhaust_fan
+    trade_group: ventilation
+    qty_driver: fixed_item
+    qty_rules_source_ids: ["QD-008"]
+    source_ids: ["TK-VNT-001"]
+  - task_key: duct_adjustment_sealing
+    trade_group: ventilation
+    qty_driver: fixed_item
+    qty_rules_source_ids: ["QD-008"]
+    source_ids: ["TK-VNT-001"]
+
+  - task_key: prep_and_paint_ceiling
+    trade_group: painting
+    qty_driver: ceiling_area_m2_or_half_day
+    qty_rules_source_ids: ["QD-009"]
+    source_ids: ["TK-PNT-001"]
+  - task_key: paint_trim_and_door
+    trade_group: painting
+    qty_driver: fixed_item_or_area
+    qty_rules_source_ids: ["QD-009"]
+    source_ids: ["TK-PNT-001"]
+  - task_key: finish_wall_paint
+    trade_group: painting
+    qty_driver: non_tiled_wall_area_m2
+    qty_rules_source_ids: ["QD-009", "AX-009"]
+    source_ids: ["TK-PNT-001"]
+
+  - task_key: protect_other_areas
+    trade_group: cleanup_waste
+    qty_driver: fixed_item
+    qty_rules_source_ids: ["QD-010"]
+    source_ids: ["TK-CLN-001"]
+  - task_key: remove_construction_debris
+    trade_group: cleanup_waste
+    qty_driver: fixed_item_or_loads
+    qty_rules_source_ids: ["QD-010"]
+    source_ids: ["TK-CLN-001"]
+  - task_key: construction_waste_disposal
+    trade_group: cleanup_waste
+    qty_driver: fixed_item
+    qty_rules_source_ids: ["QD-010"]
+    source_ids: ["TK-CLN-001"]
+  - task_key: final_cleanup
+    trade_group: cleanup_waste
+    qty_driver: fixed_item
+    qty_rules_source_ids: ["QD-010"]
+    source_ids: ["TK-CLN-001"]
+
+  - task_key: project_coordination_fee
+    trade_group: project_management_docs
+    qty_driver: percent_or_hours
+    qty_rules_source_ids: ["QD-011"]
+    source_ids: ["TK-PM-001"]
+  - task_key: permit_or_board_application
+    trade_group: project_management_docs
+    qty_driver: fixed_item
+    qty_rules_source_ids: ["QD-011"]
+    source_ids: ["TK-PM-001"]
+  - task_key: issue_wetroom_certificate
+    trade_group: project_management_docs
+    qty_driver: fixed_item
+    qty_rules_source_ids: ["QD-011", "DR-020"]
+    source_ids: ["TK-PM-001"]
+  - task_key: handover_inspection
+    trade_group: project_management_docs
+    qty_driver: fixed_item
+    qty_rules_source_ids: ["QD-011"]
+    source_ids: ["TK-PM-001"]
+
+sanity_checks:
+  plausibility_bands_source_ids: ["PB-001", "PB-002", "PB-003", "PB-004", "PB-005", "PB-006", "PB-007"]
+  needs_confirmation_source_ids: ["NC-001", "NC-002", "NC-003", "NC-004", "NC-005"]

@@ -1,0 +1,188 @@
+requirements:
+  # 1) Room definition
+  - id: RD-001
+    text: "Room is Bathroom (Swedish wet room / våtrum)."
+  - id: RD-002
+    text: "Target user: Swedish homeowner with low construction knowledge."
+  - id: RD-003
+    text: "Typical expectation for 'renovera badrum': complete update of surfaces and fixtures to modern standards (new floor & wall finishes, new sanitary fixtures, updated waterproofing, plumbing, and electrical as needed)."
+
+  # 2) User-visible change intents (UI list)
+  - id: UI-001
+    text: "Intent: change_floor_finish. label_sv: Nytt golv (kakel eller våtrumsmatta). help_sv: Byt golvbeläggning, t.ex. kakel eller våtrumsmatta. keywords_sv: golv, kakel, klinker, plastmatta, nytt golv. defaulting: on."
+  - id: UI-002
+    text: "Intent: change_wall_finish. label_sv: Nya väggytor (kakel i våtrum). help_sv: Byt väggbeklädnad, t.ex. kakel eller våtrumsskiva. keywords_sv: vägg, kakla, våtrumstapet, väggmatta, måla vägg. defaulting: on."
+  - id: UI-003
+    text: "Intent: add_underfloor_heating. label_sv: Installera golvvärme. help_sv: Lägg in golvvärme under golvet (komfortvärme). keywords_sv: golvvärme, värmegolv, värmeslingor. defaulting: off."
+  - id: UI-004
+    text: "Intent: replace_toilet. label_sv: Byta toalettstol. help_sv: Installera en ny WC-stol. keywords_sv: toalett, WC, porslin, byta toalett. defaulting: on."
+  - id: UI-005
+    text: "Intent: replace_sink_vanity. label_sv: Byta handfat/kommod. help_sv: Installera nytt tvättställ med kommod. keywords_sv: handfat, tvättställ, kommod, badrumsmöbel. defaulting: on."
+  - id: UI-006
+    text: "Intent: replace_shower. label_sv: Ny dusch/blandare. help_sv: Byt duscharmatur eller duschkabin. keywords_sv: dusch, duschkabin, duschset, blandare, duschvägg. defaulting: on."
+  - id: UI-007
+    text: "Intent: add_bathtub. label_sv: Installera badkar. help_sv: Montera ett nytt badkar (om sådant önskas). keywords_sv: badkar, bad, sätta in badkar. defaulting: off."
+  - id: UI-008
+    text: "Intent: update_lighting. label_sv: Förbättra belysning. help_sv: Installera nya lampor/spots i badrummet. keywords_sv: belysning, spotlights, taklampa, lampor. defaulting: off."
+  - id: UI-009
+    text: "Intent: improve_ventilation. label_sv: Förbättra ventilation. help_sv: Installera eller uppgradera badrumsfläkt. keywords_sv: ventilation, fläkt, frånluft, fukt. defaulting: off."
+  - id: UI-010
+    text: "Intent: change_layout. label_sv: Ändra planlösning (flytta avlopp). help_sv: Flytta golvbrunn eller VVS, ändra placering av toalett/dusch. keywords_sv: flytta, ändra planlösning, flytta toalett, flytta golvbrunn. defaulting: off."
+  - id: UI-011
+    text: "Intent: paint_ceiling. label_sv: Måla om tak/list. help_sv: Måla badrumstak och lister för en fräsch finish. keywords_sv: måla, takfärg, måla tak, lister. defaulting: on."
+
+  # 3) Dependency rules (intent -> derived scope)
+  - id: DR-001
+    text: "IF change_floor_finish OR change_wall_finish (in wetroom) THEN requires_demolition=true, requires_substrate_prep=true, requires_waterproofing=true, requires_tiler=true, requires_plumber=true."
+  - id: DR-002
+    text: "Note: Replacing floor/wall finishes in wetroom triggers full demolition of old surfaces, new substrate prep, new approved waterproofing, and tile/vinyl installation."
+  - id: DR-003
+    text: "Note: Plumber needed to detach/reattach fixtures and replace floor drain if old or during new floor installation."
+  - id: DR-004
+    text: "IF add_underfloor_heating THEN requires_electrician=true."
+  - id: DR-005
+    text: "Note: Underfloor heating assumes electric mat; if waterborne then also requires_plumber=true."
+  - id: DR-006
+    text: "Note: Adding floor heat typically implies floor finish replaced (cannot retrofit under existing tiles without floor work)."
+  - id: DR-007
+    text: "IF any fixture intent (replace_toilet OR replace_sink_vanity OR replace_shower OR add_bathtub) THEN requires_plumber=true."
+  - id: DR-008
+    text: "Note: Even if fixtures not upgraded, plumber may be needed to remove/refit fixtures when doing new surfaces."
+  - id: DR-009
+    text: "IF update_lighting THEN requires_electrician=true."
+  - id: DR-010
+    text: "Note: Bathroom electrical must meet current standards, e.g. GFCI/Jordfelsbrytare protection."
+  - id: DR-011
+    text: "Note: Recessed spotlights in concrete ceiling may require additional carpentry (false ceiling or recess)."
+  - id: DR-012
+    text: "IF improve_ventilation THEN requires_ventilation=true AND requires_electrician=true."
+  - id: DR-013
+    text: "Note: Ensure building duct can accommodate fan."
+  - id: DR-014
+    text: "IF change_layout THEN requires_demolition=true, requires_substrate_prep=true, requires_waterproofing=true, requires_tiler=true, requires_plumber=true, requires_permit_docs=true."
+  - id: DR-015
+    text: "Note: Layout change entails breaking floor/walls for new pipes, rebuilding, waterproofing/tiling disturbed areas, extensive plumbing rerouting, and often approvals/permits."
+  - id: DR-016
+    text: "IF paint_ceiling OR any non-tiled surfaces need finishing THEN requires_painter=true."
+  - id: DR-017
+    text: "IF any demolition or old fixture removal occurs THEN requires_cleanup=true."
+  - id: DR-018
+    text: "IF full renovation (multiple trades involved e.g. tiler+plumber+electrician) THEN requires_project_management=true."
+  - id: DR-019
+    text: "IF requires_waterproofing=true OR structural changes (change_layout) THEN requires_permit_docs=true."
+  - id: DR-020
+    text: "Note: Waterproofing redo requires kvalitetsdokument per Swedish industry rules (BBV/GVK); major changes may require permits or BRF approval; include documentation tasks."
+
+  # 4) Task checklist per derived flag (derived scope -> task keys)
+  - id: TK-DEM-001
+    text: "requires_demolition tasks: demolish_remove_floor_tiles; demolish_remove_wall_tiles; demolish_remove_old_fixtures; demolish_chase_for_pipes."
+  - id: TK-SUB-001
+    text: "requires_substrate_prep tasks: install_wall_backer_boards; repair_patch_walls; level_floor_screed; construct_support_structures."
+  - id: TK-WP-001
+    text: "requires_waterproofing tasks: apply_waterproof_membrane_floor; apply_waterproof_membrane_walls; waterproofing_detailing_corners."
+  - id: TK-TILE-001
+    text: "requires_tiler / requires_flooring_installer tasks: install_floor_tiles_or_vinyl; install_wall_tiles; grout_and_seal; install_shower_screen."
+  - id: TK-PL-001
+    text: "requires_plumber tasks: rough_in_new_piping; replace_floor_drain; install_toilet; install_sink_and_faucet; install_shower_fixture; pressure_test_plumbing."
+  - id: TK-EL-001
+    text: "requires_electrician tasks: install_floor_heating_cable; install_light_fixtures; install_electrical_outlets; upgrade_electrical_safety; final_electrical_inspection."
+  - id: TK-VNT-001
+    text: "requires_ventilation tasks: install_exhaust_fan; duct_adjustment_sealing; (sometimes cleaning existing vents or adding makeup air grill)."
+  - id: TK-PNT-001
+    text: "requires_painter tasks: prep_and_paint_ceiling; paint_trim_and_door; finish_wall_paint."
+  - id: TK-CLN-001
+    text: "requires_cleanup tasks: protect_other_areas; remove_construction_debris; construction_waste_disposal; final_cleanup."
+  - id: TK-PM-001
+    text: "requires_project_management and/or requires_permit_docs tasks: project_coordination_fee; permit_or_board_application; issue_wetroom_certificate; handover_inspection."
+
+  # 5) Quantity derivation rules (tasks -> quantities, rounding, waste, mins)
+  - id: QD-001
+    text: "Floor tiling/vinyl & waterproofing: driven by floor area (m²). Round up to packaging/sheet sizes. Tile waste ~10% (e.g. 5.0 -> 5.5 m²). Vinyl: order whole piece with surplus for trimming."
+  - id: QD-002
+    text: "Minimum charge: small floors (e.g. 2 m² WC) often billed as e.g. 4 m² due to setup effort."
+  - id: QD-003
+    text: "Wall tiling & waterproofing: driven by wall surface area (m²). Account full wall height in wet zones. Add ~10% tile waste. Round up to nearest 0.5–1.0 m²."
+  - id: QD-004
+    text: "Minimum charge: small wall tile areas (splash) minimum 1–2 m²."
+  - id: QD-005
+    text: "Carpentry/substrate: wall boards by board count; round up. Floor leveling compound by volume (area*depth) sold per bag; round up; include 5–10% waste/spill. Small areas may have minimum batch. Framing/support may be hourly or fixed per item. Minimum half-day charges may apply."
+  - id: QD-006
+    text: "Plumbing: based on fixture counts and complexity; typical allocations (e.g. ~2h per WC or vanity). Pipe rerouting by meters+connections or hourly. Plumber minimum call-out ~2h (~1500–2500 SEK). Floor drain replacement is fixed item (~5–10k SEK incl materials). Certified installers (Säker Vatten) affects rates."
+  - id: QD-007
+    text: "Electrical: driven by number of points (light, heater, fan, outlet) plus circuits. 1–2h each typical. Underfloor heating by heated area m² + thermostat pcs. Electrician minimum ~2h (~1500–2000 SEK). Include RCD if missing (fixed item). Labor dominates."
+  - id: QD-008
+    text: "Ventilation: usually per piece (exhaust fan install fixed price ~couple hours). Duct extensions/roof kits per item. Minimum charge if standalone; may combine with electrician visit sometimes."
+  - id: QD-009
+    text: "Painting: by surface area m² for ceilings/walls; small areas may be hour/day-based. Minimum half-day for tiny bathrooms. Paint purchased per can (e.g. 1L even if 0.5 used). Low waste but fixed packaging."
+  - id: QD-010
+    text: "Demolition & waste: tile demo measured m². Small jobs have base cost if <5 m². Fixture removal per piece. Waste disposal often fixed: container rental ~3000–5000 SEK with minimum load even for small bathrooms."
+  - id: QD-011
+    text: "Project management/docs: often % of total (commonly 5–15%) or fixed fee. Minimum overhead even small full reno: at least 4–8 hours PM. Documentation tasks fixed per project."
+  - id: QD-012
+    text: "Assumption baseline: typical small bathroom ~5 m² floor and ~20 m² wall. Trades have minimum charges ~0.5–1 day if called out. Include waste + contingency margin to avoid underestimation."
+
+  # 6) Material/fixture selection axes
+  - id: AX-001
+    text: "Selection axis floor_finish options: wetroom_vinyl, ceramic_tile_standard, ceramic_tile_premium."
+  - id: AX-002
+    text: "Floor wetroom_vinyl effect: vinyl acts as waterproof layer on floor; separate floor membrane not needed; corners/seams heat-welded; reduces labor and materials; requires specialist flooring installer."
+  - id: AX-003
+    text: "Floor ceramic_tile_standard effect: requires substrate prep + waterproofing + tile laying + grouting."
+  - id: AX-004
+    text: "Floor ceramic_tile_premium effect: similar tasks as standard but higher material + often more labor (large format care, possible sealing, complex patterns). Possibly extra substrate flattening for very large tiles."
+  - id: AX-005
+    text: "Selection axis wall_finish options: wetroom_vinyl, ceramic_tile_standard, ceramic_tile_premium, painted_walls."
+  - id: AX-006
+    text: "Wall wetroom_vinyl effect: vinyl/panels serve as waterproofing + finish; eliminates separate membrane + tiling on walls; faster/cheaper; different aesthetic."
+  - id: AX-007
+    text: "Wall ceramic_tile_standard effect: waterproofing on wet wall areas + tile + grout."
+  - id: AX-008
+    text: "Wall ceramic_tile_premium effect: no new steps but higher material + potentially more labor (stone drilling, large slabs, mosaics alignment)."
+  - id: AX-009
+    text: "Assumption: full wetroom standard expects tiled or vinyl surfaces; wetroom paint is supported via the painted_walls option."
+  - id: AX-010
+    text: "Selection axis fixtures_tier options: basic, standard, premium (WC, basin, shower/bath collectively)."
+  - id: AX-011
+    text: "Basic vs standard fixtures usually change material cost more than labor scope."
+  - id: AX-012
+    text: "Premium fixtures may add scope: wall-hung WC frame (extra carpentry+plumbing), built-in mixer/rain shower (hidden lines, niches/ceiling drop), jacuzzi tub (electrical + structural support). If premium is only finish, cost-only; often premium implies built-in/custom so be prepared for extra tasks toggled by specific premium features."
+
+  # 7) Plausibility bands (sanity checks)
+  - id: PB-001
+    text: "Bathroom refresh (fixtures only, surfaces unchanged): ~20,000–60,000 SEK incl VAT."
+  - id: PB-002
+    text: "Full wetroom rebuild typical: ~80,000–180,000 SEK incl VAT for small-to-medium; basic 80–100k; high-end materials 150k+; average 5 m² often ~120–150k mid-grade."
+  - id: PB-003
+    text: "Major renovation (layout changes/premium features): ~150,000–300,000 SEK incl VAT; high-end custom can approach 250–300k."
+  - id: PB-004
+    text: "Rule of thumb SEK per m² full renovation: 10,000–25,000 SEK/m²; small bathrooms skew higher; common 15–20k/m²; scrutinize if <8k/m² or >30k/m²."
+  - id: PB-005
+    text: "Cost share expectations for full reno: surface finishes (substrate+waterproofing+tiling) often 30–50% total; should likely not drop below ~25–30% if new surfaces selected."
+  - id: PB-006
+    text: "Plumbing+fixtures often 20–30% if layout unchanged; more if moving pipes or expensive fixtures. Electrical 5–15%. Demolition+waste 5–10%. PM/docs/overhead 5–15%."
+  - id: PB-007
+    text: "If tiling+waterproofing only ~10% despite new surfaces, likely missing scope; if fixtures huge share, should correspond to premium products or extra install work."
+
+  # 8) Needs confirmation triggers (questions in Swedish)
+  - id: NC-001
+    text: "Missing measurements trigger: ask 'Hur stort är badrummet (golvyta i kvm)?'"
+  - id: NC-002
+    text: "Unclear wet zone extent trigger: ask 'Ska hela badrummet (alla väggar) renoveras med tätskikt och kakel, eller bara duschutrymmet?'"
+  - id: NC-003
+    text: "Drain move ambiguity trigger: ask 'Kommer du att flytta golvbrunnen eller andra avlopp i badrummet?'"
+  - id: NC-004
+    text: "Old building/asbestos risk trigger: if built before ~1980 ask 'Är byggnaden från före 1980-talet? (Äldre badrum kan ha asbest i fix/fog som behöver specialhantering.)' and plan asbestos testing/abatement workflow/cost if yes."
+  - id: NC-005
+    text: "Additional: if underfloor heating selected without floor replacement, ask 'Planerar du att lägga ny golvbeläggning i samband med golvvärmen?'"
+
+  # 9) Sources/reference anchors
+  - id: SRC-001
+    text: "Byggkeramikrådet (BKR) – Checklist för badrumsrenovering (2025): guidance on wet room steps; replace floor drains older than 1990; certified waterproofing (BBV); ventilation; asbestos warnings pre-1980."
+  - id: SRC-002
+    text: "Offerta.se – 'Vad kostar det att renovera badrummet?' (Dec 2025): price ranges per m² and example costs; 8,000–25,000 kr/m²; ~80k–160k for 5 m²; up to ~300k high-end."
+  - id: SRC-003
+    text: "Renovera Badrum – Prisguide 2025: average full reno ~80k–150k for 5–6 m²; partial renos from ~30k; moving plumbing/drain can add ~10k–30k; labor ~50–70% of cost; ROT tax can mitigate labor cost."
+  - id: SRC-004
+    text: "Hantverkarpriser – 8 m² example (2026): stage labor hours (demo ~12h, plumbing ~12h, electrical ~12h, substrate ~24h, tiling ~60h or vinyl ~40h), hourly rates ~500 SEK/h example; vinyl can save labor; supports sequence/labor distribution."
+  - id: SRC-005
+    text: "Säker Vatten and branch standards: certified plumbers/electricians in wet areas; GFCI/Jordfelsbrytare; certificates/intyg; wetroom docs (BBV/GVK) included."

@@ -1,0 +1,45 @@
+{
+  "analysis": {
+    "room_type": "bathroom",
+    "bathroom_size_estimate": "between_4_and_7_sqm",
+    "bathroom_size_confidence": 0.85,
+    "detected_fixtures": {
+      "shower_present": true,
+      "bathtub_present": false,
+      "toilet_present": true,
+      "sink_present": true
+    },
+    "layout_features": {
+      "shower_zone_visible": true,
+      "wet_room_layout": false,
+      "tight_space": false,
+      "irregular_geometry": false
+    },
+    "ceiling_features": {
+      "ceiling_visible": true,
+      "sloped_ceiling_detected": false
+    },
+    "condition_signals": {
+      "overall_condition": "good"
+    },
+    "image_quality": {
+      "sufficient_for_estimate": true,
+      "issues": []
+    },
+    "analysis_confidence": 0.8
+  },
+  "overrides": {
+    "bathroom_size_final": "between_4_and_7_sqm",
+    "bathroom_size_source": "ai_estimated"
+  },
+  "outcome": {
+    "shower_type": "walk_in_shower_glass",
+    "bathtub": "no",
+    "toilet_type": "wall_hung",
+    "vanity_type": "vanity_with_cabinet",
+    "wall_finish": "painted_walls_only",
+    "floor_finish": "standard_ceramic_tiles",
+    "ceiling_type": "moisture_resistant_panels",
+    "layout_change": "no"
+  }
+}

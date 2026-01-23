@@ -1,0 +1,66 @@
+task_rates:
+  demolish_remove_floor_tiles: { unit: "m2", labor_sek_per_unit: 650, material_sek_per_unit: 0, min_charge_sek: 2500 }
+  demolish_remove_wall_tiles: { unit: "m2", labor_sek_per_unit: 600, material_sek_per_unit: 0, min_charge_sek: 2200 }
+  demolish_remove_old_fixtures: { unit: "pcs", labor_sek_per_unit: 500, material_sek_per_unit: 0, min_charge_sek: 1300 }
+  demolish_chase_for_pipes: { unit: "pcs", labor_sek_per_unit: 1000, material_sek_per_unit: 180, min_charge_sek: 1800 }
+
+  install_wall_backer_boards: { unit: "m2", labor_sek_per_unit: 600, material_sek_per_unit: 250, min_charge_sek: 2500 }
+  repair_patch_walls: { unit: "m2", labor_sek_per_unit: 450, material_sek_per_unit: 120, min_charge_sek: 1800 }
+  level_floor_screed: { unit: "m2", labor_sek_per_unit: 550, material_sek_per_unit: 150, min_charge_sek: 2500 }
+  construct_support_structures: { unit: "pcs", labor_sek_per_unit: 900, material_sek_per_unit: 250, min_charge_sek: 1800 }
+
+  apply_waterproof_membrane_floor: { unit: "m2", labor_sek_per_unit: 500, material_sek_per_unit: 150, min_charge_sek: 2500 }
+  apply_waterproof_membrane_walls: { unit: "m2", labor_sek_per_unit: 450, material_sek_per_unit: 170, min_charge_sek: 2200 }
+  waterproofing_detailing_corners: { unit: "pcs", labor_sek_per_unit: 300, material_sek_per_unit: 100, min_charge_sek: 1000 }
+
+  install_floor_tiles_or_vinyl: { unit: "m2", labor_sek_per_unit: 700, material_sek_per_unit: 280, min_charge_sek: 3800 }
+  install_floor_microcement: { unit: "m2", labor_sek_per_unit: 900, material_sek_per_unit: 450, min_charge_sek: 3800 }
+  install_wall_tiles: { unit: "m2", labor_sek_per_unit: 650, material_sek_per_unit: 260, min_charge_sek: 3200 }
+  grout_and_seal: { unit: "m2", labor_sek_per_unit: 220, material_sek_per_unit: 70, min_charge_sek: 1200 }
+  install_shower_screen: { unit: "pcs", labor_sek_per_unit: 1200, material_sek_per_unit: 500, min_charge_sek: 2000 }
+
+  rough_in_new_piping: { unit: "pts", labor_sek_per_unit: 700, material_sek_per_unit: 250, min_charge_sek: 2500 }
+  replace_floor_drain: { unit: "pcs", labor_sek_per_unit: 2500, material_sek_per_unit: 2000, min_charge_sek: 4500 }
+  install_toilet: { unit: "pcs", labor_sek_per_unit: 1500, material_sek_per_unit: 1200, min_charge_sek: 2500 }
+  install_sink_and_faucet: { unit: "pcs", labor_sek_per_unit: 1400, material_sek_per_unit: 1200, min_charge_sek: 2400 }
+  install_shower_fixture: { unit: "pcs", labor_sek_per_unit: 1200, material_sek_per_unit: 800, min_charge_sek: 2000 }
+  pressure_test_plumbing: { unit: "pcs", labor_sek_per_unit: 900, material_sek_per_unit: 0, min_charge_sek: 1500 }
+
+  install_floor_heating_cable: { unit: "m2", labor_sek_per_unit: 800, material_sek_per_unit: 500, min_charge_sek: 3500 }
+  install_light_fixtures: { unit: "pts", labor_sek_per_unit: 700, material_sek_per_unit: 300, min_charge_sek: 1800 }
+  install_electrical_outlets: { unit: "pts", labor_sek_per_unit: 600, material_sek_per_unit: 250, min_charge_sek: 1500 }
+  upgrade_electrical_safety: { unit: "pcs", labor_sek_per_unit: 1800, material_sek_per_unit: 1200, min_charge_sek: 2500 }
+  final_electrical_inspection: { unit: "pcs", labor_sek_per_unit: 1200, material_sek_per_unit: 0, min_charge_sek: 1200 }
+
+  install_exhaust_fan: { unit: "pcs", labor_sek_per_unit: 1500, material_sek_per_unit: 800, min_charge_sek: 2500 }
+  duct_adjustment_sealing: { unit: "pcs", labor_sek_per_unit: 900, material_sek_per_unit: 400, min_charge_sek: 1800 }
+
+  prep_and_paint_ceiling: { unit: "m2", labor_sek_per_unit: 350, material_sek_per_unit: 80, min_charge_sek: 1500 }
+  paint_trim_and_door: { unit: "pcs", labor_sek_per_unit: 700, material_sek_per_unit: 150, min_charge_sek: 1200 }
+  finish_wall_paint: { unit: "m2", labor_sek_per_unit: 320, material_sek_per_unit: 100, min_charge_sek: 1500 }
+
+  protect_other_areas: { unit: "pcs", labor_sek_per_unit: 800, material_sek_per_unit: 200, min_charge_sek: 1200 }
+  remove_construction_debris: { unit: "pcs", labor_sek_per_unit: 600, material_sek_per_unit: 300, min_charge_sek: 1200 }
+  construction_waste_disposal: { unit: "pcs", labor_sek_per_unit: 500, material_sek_per_unit: 800, min_charge_sek: 1500 }
+  final_cleanup: { unit: "pcs", labor_sek_per_unit: 700, material_sek_per_unit: 200, min_charge_sek: 1500 }
+
+  project_coordination_fee: { unit: "project", labor_sek_per_unit: 5000, material_sek_per_unit: 0, min_charge_sek: 5000 }
+  permit_or_board_application: { unit: "project", labor_sek_per_unit: 3000, material_sek_per_unit: 500, min_charge_sek: 3000 }
+  issue_wetroom_certificate: { unit: "project", labor_sek_per_unit: 2000, material_sek_per_unit: 500, min_charge_sek: 2000 }
+  handover_inspection: { unit: "project", labor_sek_per_unit: 1500, material_sek_per_unit: 0, min_charge_sek: 1500 }
+
+  demolition_layout_change_allowance: { unit: "item", labor_sek_per_unit: 3500, material_sek_per_unit: 0, min_charge_sek: 0 }
+  plumbing_layout_change_reroute_allowance: { unit: "item", labor_sek_per_unit: 9000, material_sek_per_unit: 1000, min_charge_sek: 0 }
+  substrate_layout_change_allowance: { unit: "item", labor_sek_per_unit: 4000, material_sek_per_unit: 500, min_charge_sek: 0 }
+  documentation_layout_change_allowance: { unit: "item", labor_sek_per_unit: 2000, material_sek_per_unit: 0, min_charge_sek: 0 }
+  layout_change_area_allowance: { unit: "m2", labor_sek_per_unit: 1200, material_sek_per_unit: 0, min_charge_sek: 0 }
+  layout_change_fixture_allowance: { unit: "item", labor_sek_per_unit: 4500, material_sek_per_unit: 400, min_charge_sek: 0 }
+  layout_change_wet_zone_allowance: { unit: "m2", labor_sek_per_unit: 700, material_sek_per_unit: 0, min_charge_sek: 0 }
+  toilet_wall_hung_allowance: { unit: "item", labor_sek_per_unit: 2500, material_sek_per_unit: 1500, min_charge_sek: 0 }
+  ceiling_panels_allowance: { unit: "item", labor_sek_per_unit: 1800, material_sek_per_unit: 1200, min_charge_sek: 0 }
+  ceiling_sloped_allowance: { unit: "item", labor_sek_per_unit: 1200, material_sek_per_unit: 0, min_charge_sek: 0 }
+  shower_niche_allowance: { unit: "item", labor_sek_per_unit: 1200, material_sek_per_unit: 400, min_charge_sek: 0 }
+
+overhead:
+  project_management_pct: 0.07
+  contingency_pct: 0.08

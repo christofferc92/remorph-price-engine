@@ -1,0 +1,616 @@
+[
+  {
+    "key": "apply_waterproof_membrane_floor",
+    "trade_group": "waterproofing",
+    "unit": "m2",
+    "qty_driver": "floor_area_m2",
+    "qty_rules_source_ids": [
+      "QD-001"
+    ],
+    "source_ids": [
+      "TK-WP-001"
+    ]
+  },
+  {
+    "key": "apply_waterproof_membrane_walls",
+    "trade_group": "waterproofing",
+    "unit": "m2",
+    "qty_driver": "wet_zone_wall_area_m2",
+    "qty_rules_source_ids": [
+      "QD-003"
+    ],
+    "source_ids": [
+      "TK-WP-001",
+      "NC-002"
+    ]
+  },
+  {
+    "key": "ceiling_panels_allowance",
+    "trade_group": "carpentry_substrate",
+    "unit": "item",
+    "qty_driver": "1 when painting ceiling with panels (ceiling_type includes panels)",
+    "source_notes": "estimator.ts:343-370"
+  },
+  {
+    "key": "ceiling_sloped_allowance",
+    "trade_group": "painting",
+    "unit": "item",
+    "qty_driver": "1 when painting a sloped ceiling",
+    "source_notes": "estimator.ts:372-387"
+  },
+  {
+    "key": "construct_support_structures",
+    "trade_group": "carpentry_substrate",
+    "unit": "pcs",
+    "qty_driver": "items_or_hourly",
+    "qty_rules_source_ids": [
+      "QD-005",
+      "AX-012"
+    ],
+    "source_ids": [
+      "TK-SUB-001"
+    ]
+  },
+  {
+    "key": "construction_waste_disposal",
+    "trade_group": "cleanup_waste",
+    "unit": "pcs",
+    "qty_driver": "fixed_item",
+    "qty_rules_source_ids": [
+      "QD-010"
+    ],
+    "source_ids": [
+      "TK-CLN-001"
+    ]
+  },
+  {
+    "key": "demolish_chase_for_pipes",
+    "trade_group": "demolition",
+    "unit": "pcs",
+    "qty_driver": "complexity_hourly",
+    "qty_rules_source_ids": [
+      "QD-010"
+    ],
+    "source_ids": [
+      "TK-DEM-001"
+    ]
+  },
+  {
+    "key": "demolish_remove_floor_tiles",
+    "trade_group": "demolition",
+    "unit": "m2",
+    "qty_driver": "floor_area_m2",
+    "qty_rules_source_ids": [
+      "QD-010"
+    ],
+    "source_ids": [
+      "TK-DEM-001"
+    ]
+  },
+  {
+    "key": "demolish_remove_old_fixtures",
+    "trade_group": "demolition",
+    "unit": "pcs",
+    "qty_driver": "fixture_count",
+    "qty_rules_source_ids": [
+      "QD-010"
+    ],
+    "source_ids": [
+      "TK-DEM-001"
+    ]
+  },
+  {
+    "key": "demolish_remove_wall_tiles",
+    "trade_group": "demolition",
+    "unit": "m2",
+    "qty_driver": "wall_area_m2",
+    "qty_rules_source_ids": [
+      "QD-010"
+    ],
+    "source_ids": [
+      "TK-DEM-001"
+    ]
+  },
+  {
+    "key": "demolition_layout_change_allowance",
+    "trade_group": "demolition",
+    "unit": "item",
+    "qty_driver": "fixed_item",
+    "qty_rules_source_ids": [
+      "QD-010"
+    ],
+    "source_ids": [
+      "TK-DEM-002"
+    ]
+  },
+  {
+    "key": "documentation_layout_change_allowance",
+    "trade_group": "project_management_docs",
+    "unit": "item",
+    "qty_driver": "fixed_item",
+    "qty_rules_source_ids": [
+      "QD-019"
+    ],
+    "source_ids": [
+      "TK-PM-010"
+    ]
+  },
+  {
+    "key": "duct_adjustment_sealing",
+    "trade_group": "ventilation",
+    "unit": "pcs",
+    "qty_driver": "fixed_item",
+    "qty_rules_source_ids": [
+      "QD-008"
+    ],
+    "source_ids": [
+      "TK-VNT-001"
+    ]
+  },
+  {
+    "key": "final_cleanup",
+    "trade_group": "cleanup_waste",
+    "unit": "pcs",
+    "qty_driver": "fixed_item",
+    "qty_rules_source_ids": [
+      "QD-010"
+    ],
+    "source_ids": [
+      "TK-CLN-001"
+    ]
+  },
+  {
+    "key": "final_electrical_inspection",
+    "trade_group": "electrical",
+    "unit": "pcs",
+    "qty_driver": "fixed_item",
+    "qty_rules_source_ids": [
+      "QD-007"
+    ],
+    "source_ids": [
+      "TK-EL-001"
+    ]
+  },
+  {
+    "key": "finish_wall_paint",
+    "trade_group": "painting",
+    "unit": "m2",
+    "qty_driver": "non_tiled_wall_area_m2",
+    "qty_rules_source_ids": [
+      "QD-009",
+      "AX-009"
+    ],
+    "source_ids": [
+      "TK-PNT-001"
+    ]
+  },
+  {
+    "key": "grout_and_seal",
+    "trade_group": "tiling_or_vinyl",
+    "unit": "m2",
+    "qty_driver": "areas_and_edges",
+    "qty_rules_source_ids": [
+      "QD-001",
+      "QD-003"
+    ],
+    "source_ids": [
+      "TK-TILE-001"
+    ]
+  },
+  {
+    "key": "handover_inspection",
+    "trade_group": "project_management_docs",
+    "unit": "project",
+    "qty_driver": "fixed_item",
+    "qty_rules_source_ids": [
+      "QD-011"
+    ],
+    "source_ids": [
+      "TK-PM-001"
+    ]
+  },
+  {
+    "key": "install_electrical_outlets",
+    "trade_group": "electrical",
+    "unit": "pts",
+    "qty_driver": "electrical_points",
+    "qty_rules_source_ids": [
+      "QD-007"
+    ],
+    "source_ids": [
+      "TK-EL-001"
+    ]
+  },
+  {
+    "key": "install_exhaust_fan",
+    "trade_group": "ventilation",
+    "unit": "pcs",
+    "qty_driver": "fixed_item",
+    "qty_rules_source_ids": [
+      "QD-008"
+    ],
+    "source_ids": [
+      "TK-VNT-001"
+    ]
+  },
+  {
+    "key": "install_floor_heating_cable",
+    "trade_group": "electrical",
+    "unit": "m2",
+    "qty_driver": "heated_floor_area_m2",
+    "qty_rules_source_ids": [
+      "QD-007"
+    ],
+    "source_ids": [
+      "TK-EL-001"
+    ]
+  },
+  {
+    "key": "install_floor_microcement",
+    "trade_group": "tiling_or_vinyl",
+    "unit": "m2",
+    "qty_driver": "floor_area_m2",
+    "qty_rules_source_ids": [
+      "QD-001",
+      "QD-002"
+    ],
+    "source_ids": [
+      "TK-TILE-001",
+      "AX-001",
+      "AX-002",
+      "AX-003",
+      "AX-004"
+    ]
+  },
+  {
+    "key": "install_floor_tiles_or_vinyl",
+    "trade_group": "tiling_or_vinyl",
+    "unit": "m2",
+    "qty_driver": "floor_area_m2",
+    "qty_rules_source_ids": [
+      "QD-001",
+      "QD-002"
+    ],
+    "source_ids": [
+      "TK-TILE-001",
+      "AX-001",
+      "AX-002",
+      "AX-003",
+      "AX-004"
+    ]
+  },
+  {
+    "key": "install_light_fixtures",
+    "trade_group": "electrical",
+    "unit": "pts",
+    "qty_driver": "electrical_points",
+    "qty_rules_source_ids": [
+      "QD-007"
+    ],
+    "source_ids": [
+      "TK-EL-001"
+    ]
+  },
+  {
+    "key": "install_shower_fixture",
+    "trade_group": "plumbing",
+    "unit": "pcs",
+    "qty_driver": "fixture_count",
+    "qty_rules_source_ids": [
+      "QD-006",
+      "AX-012"
+    ],
+    "source_ids": [
+      "TK-PL-001"
+    ]
+  },
+  {
+    "key": "install_shower_screen",
+    "trade_group": "tiling_or_vinyl",
+    "unit": "pcs",
+    "qty_driver": "item_count",
+    "qty_rules_source_ids": [],
+    "source_ids": [
+      "TK-TILE-001"
+    ]
+  },
+  {
+    "key": "install_sink_and_faucet",
+    "trade_group": "plumbing",
+    "unit": "pcs",
+    "qty_driver": "fixture_count",
+    "qty_rules_source_ids": [
+      "QD-006"
+    ],
+    "source_ids": [
+      "TK-PL-001"
+    ]
+  },
+  {
+    "key": "install_toilet",
+    "trade_group": "plumbing",
+    "unit": "pcs",
+    "qty_driver": "fixture_count",
+    "qty_rules_source_ids": [
+      "QD-006",
+      "AX-012"
+    ],
+    "source_ids": [
+      "TK-PL-001"
+    ]
+  },
+  {
+    "key": "install_wall_backer_boards",
+    "trade_group": "carpentry_substrate",
+    "unit": "m2",
+    "qty_driver": "wall_area_m2_or_boards",
+    "qty_rules_source_ids": [
+      "QD-005"
+    ],
+    "source_ids": [
+      "TK-SUB-001"
+    ]
+  },
+  {
+    "key": "install_wall_tiles",
+    "trade_group": "tiling_or_vinyl",
+    "unit": "m2",
+    "qty_driver": "wet_zone_wall_area_m2",
+    "qty_rules_source_ids": [
+      "QD-003",
+      "QD-004"
+    ],
+    "source_ids": [
+      "TK-TILE-001",
+      "AX-005",
+      "AX-006",
+      "AX-007",
+      "AX-008"
+    ]
+  },
+  {
+    "key": "issue_wetroom_certificate",
+    "trade_group": "project_management_docs",
+    "unit": "project",
+    "qty_driver": "fixed_item",
+    "qty_rules_source_ids": [
+      "QD-011",
+      "DR-020"
+    ],
+    "source_ids": [
+      "TK-PM-001"
+    ]
+  },
+  {
+    "key": "layout_change_area_allowance",
+    "trade_group": "demolition",
+    "unit": "m2",
+    "qty_driver": "floor_area_m2",
+    "qty_rules_source_ids": [
+      "LAYOUT-001"
+    ],
+    "source_ids": [
+      "TK-DEM-003"
+    ]
+  },
+  {
+    "key": "layout_change_fixture_allowance",
+    "trade_group": "plumbing",
+    "unit": "item",
+    "qty_driver": "fixture_count",
+    "qty_rules_source_ids": [
+      "LAYOUT-002"
+    ],
+    "source_ids": [
+      "TK-PL-011"
+    ]
+  },
+  {
+    "key": "layout_change_wet_zone_allowance",
+    "trade_group": "carpentry_substrate",
+    "unit": "m2",
+    "qty_driver": "wet_zone_wall_area_m2",
+    "qty_rules_source_ids": [
+      "LAYOUT-003"
+    ],
+    "source_ids": [
+      "TK-SUB-011"
+    ]
+  },
+  {
+    "key": "level_floor_screed",
+    "trade_group": "carpentry_substrate",
+    "unit": "m2",
+    "qty_driver": "floor_area_m2_and_depth",
+    "qty_rules_source_ids": [
+      "QD-005"
+    ],
+    "source_ids": [
+      "TK-SUB-001"
+    ]
+  },
+  {
+    "key": "paint_trim_and_door",
+    "trade_group": "painting",
+    "unit": "pcs",
+    "qty_driver": "fixed_item_or_area",
+    "qty_rules_source_ids": [
+      "QD-009"
+    ],
+    "source_ids": [
+      "TK-PNT-001"
+    ]
+  },
+  {
+    "key": "permit_or_board_application",
+    "trade_group": "project_management_docs",
+    "unit": "project",
+    "qty_driver": "fixed_item",
+    "qty_rules_source_ids": [
+      "QD-011"
+    ],
+    "source_ids": [
+      "TK-PM-001"
+    ]
+  },
+  {
+    "key": "plumbing_layout_change_reroute_allowance",
+    "trade_group": "plumbing",
+    "unit": "item",
+    "qty_driver": "fixed_item",
+    "qty_rules_source_ids": [
+      "QD-010"
+    ],
+    "source_ids": [
+      "TK-PL-010"
+    ]
+  },
+  {
+    "key": "prep_and_paint_ceiling",
+    "trade_group": "painting",
+    "unit": "m2",
+    "qty_driver": "ceiling_area_m2_or_half_day",
+    "qty_rules_source_ids": [
+      "QD-009"
+    ],
+    "source_ids": [
+      "TK-PNT-001"
+    ]
+  },
+  {
+    "key": "pressure_test_plumbing",
+    "trade_group": "plumbing",
+    "unit": "pcs",
+    "qty_driver": "fixed_item",
+    "qty_rules_source_ids": [
+      "QD-006"
+    ],
+    "source_ids": [
+      "TK-PL-001"
+    ]
+  },
+  {
+    "key": "project_coordination_fee",
+    "trade_group": "project_management_docs",
+    "unit": "project",
+    "qty_driver": "percent_or_hours",
+    "qty_rules_source_ids": [
+      "QD-011"
+    ],
+    "source_ids": [
+      "TK-PM-001"
+    ]
+  },
+  {
+    "key": "protect_other_areas",
+    "trade_group": "cleanup_waste",
+    "unit": "pcs",
+    "qty_driver": "fixed_item",
+    "qty_rules_source_ids": [
+      "QD-010"
+    ],
+    "source_ids": [
+      "TK-CLN-001"
+    ]
+  },
+  {
+    "key": "remove_construction_debris",
+    "trade_group": "cleanup_waste",
+    "unit": "pcs",
+    "qty_driver": "fixed_item_or_loads",
+    "qty_rules_source_ids": [
+      "QD-010"
+    ],
+    "source_ids": [
+      "TK-CLN-001"
+    ]
+  },
+  {
+    "key": "repair_patch_walls",
+    "trade_group": "carpentry_substrate",
+    "unit": "m2",
+    "qty_driver": "wall_area_m2",
+    "qty_rules_source_ids": [
+      "QD-005"
+    ],
+    "source_ids": [
+      "TK-SUB-001"
+    ]
+  },
+  {
+    "key": "replace_floor_drain",
+    "trade_group": "plumbing",
+    "unit": "pcs",
+    "qty_driver": "fixed_item",
+    "qty_rules_source_ids": [
+      "QD-006",
+      "SRC-001"
+    ],
+    "source_ids": [
+      "TK-PL-001"
+    ]
+  },
+  {
+    "key": "rough_in_new_piping",
+    "trade_group": "plumbing",
+    "unit": "pts",
+    "qty_driver": "hourly_or_meters",
+    "qty_rules_source_ids": [
+      "QD-006"
+    ],
+    "source_ids": [
+      "TK-PL-001"
+    ]
+  },
+  {
+    "key": "shower_niche_allowance",
+    "trade_group": "carpentry_substrate",
+    "unit": "item",
+    "qty_driver": "1 or 2 niches when replacing shower",
+    "source_notes": "estimator.ts:389-417"
+  },
+  {
+    "key": "substrate_layout_change_allowance",
+    "trade_group": "carpentry_substrate",
+    "unit": "item",
+    "qty_driver": "fixed_item",
+    "qty_rules_source_ids": [
+      "QD-005"
+    ],
+    "source_ids": [
+      "TK-SUB-010"
+    ]
+  },
+  {
+    "key": "toilet_wall_hung_allowance",
+    "trade_group": "plumbing",
+    "unit": "item",
+    "qty_driver": "1 allowance when on a wall-hung toilet, added once even without install_toilet task",
+    "source_notes": "estimator.ts:323-341"
+  },
+  {
+    "key": "upgrade_electrical_safety",
+    "trade_group": "electrical",
+    "unit": "pcs",
+    "qty_driver": "fixed_item_or_points",
+    "qty_rules_source_ids": [
+      "QD-007",
+      "DR-010"
+    ],
+    "source_ids": [
+      "TK-EL-001"
+    ]
+  },
+  {
+    "key": "waterproofing_detailing_corners",
+    "trade_group": "waterproofing",
+    "unit": "pcs",
+    "qty_driver": "penetrations_and_corners",
+    "qty_rules_source_ids": [
+      "QD-003"
+    ],
+    "source_ids": [
+      "TK-WP-001"
+    ]
+  }
+]

@@ -1,0 +1,170 @@
+{
+  "bathroom_size_final": [
+    {
+      "value": "under_4_sqm",
+      "label": "Under 4 m²"
+    },
+    {
+      "value": "between_4_and_7_sqm",
+      "label": "4–7 m²"
+    },
+    {
+      "value": "over_7_sqm",
+      "label": "Över 7 m²"
+    }
+  ],
+  "shower_type": [
+    {
+      "value": "walk_in_shower_glass",
+      "label": "Walk-in shower (glass)"
+    },
+    {
+      "value": "shower_cabin",
+      "label": "Shower cabin"
+    },
+    {
+      "value": "no_shower",
+      "label": "No shower"
+    },
+    {
+      "value": "keep",
+      "label": "Behåll som det är"
+    }
+  ],
+  "bathtub": [
+    {
+      "value": "yes",
+      "label": "With bathtub"
+    },
+    {
+      "value": "no",
+      "label": "No bathtub"
+    },
+    {
+      "value": "keep",
+      "label": "Behåll som det är"
+    }
+  ],
+  "toilet_type": [
+    {
+      "value": "wall_hung",
+      "label": "Wall-hung toilet"
+    },
+    {
+      "value": "floor_standing",
+      "label": "Floor-standing toilet"
+    },
+    {
+      "value": "keep",
+      "label": "Behåll som det är"
+    }
+  ],
+  "vanity_type": [
+    {
+      "value": "vanity_with_cabinet",
+      "label": "Vanity with cabinet"
+    },
+    {
+      "value": "simple_sink",
+      "label": "Simple sink"
+    },
+    {
+      "value": "no_sink",
+      "label": "No sink"
+    },
+    {
+      "value": "keep",
+      "label": "Behåll som det är"
+    }
+  ],
+  "wall_finish": [
+    {
+      "value": "tiles_all_walls",
+      "label": "Tiles on all walls"
+    },
+    {
+      "value": "large_format_tiles_all_walls",
+      "label": "Large-format tiles"
+    },
+    {
+      "value": "tiles_wet_zone_only",
+      "label": "Tiles in wet zone"
+    },
+    {
+      "value": "painted_walls_only",
+      "label": "Painted walls"
+    },
+    {
+      "value": "keep",
+      "label": "Behåll som det är"
+    }
+  ],
+  "floor_finish": [
+    {
+      "value": "standard_ceramic_tiles",
+      "label": "Standard ceramic tiles"
+    },
+    {
+      "value": "large_format_tiles",
+      "label": "Large-format tiles"
+    },
+    {
+      "value": "vinyl_wet_room_mat",
+      "label": "Vinyl wet room mat"
+    },
+    {
+      "value": "microcement_seamless",
+      "label": "Microcement"
+    },
+    {
+      "value": "keep",
+      "label": "Behåll som det är"
+    }
+  ],
+  "ceiling_type": [
+    {
+      "value": "painted_ceiling",
+      "label": "Painted ceiling"
+    },
+    {
+      "value": "moisture_resistant_panels",
+      "label": "Moisture-resistant panels"
+    },
+    {
+      "value": "sloped_painted",
+      "label": "Sloped painted"
+    },
+    {
+      "value": "sloped_with_panels",
+      "label": "Sloped with panels"
+    },
+    {
+      "value": "keep",
+      "label": "Behåll som det är"
+    }
+  ],
+  "layout_change": [
+    {
+      "value": "yes",
+      "label": "Yes"
+    },
+    {
+      "value": "no",
+      "label": "No"
+    }
+  ],
+  "shower_niches": [
+    {
+      "value": "none",
+      "label": "No niches"
+    },
+    {
+      "value": "one",
+      "label": "One niche"
+    },
+    {
+      "value": "two_or_more",
+      "label": "Two or more"
+    }
+  ]
+}

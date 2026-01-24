@@ -198,13 +198,50 @@ function assertMetadataEcho(res: ReturnType<typeof createResponse>, expectedSite
 }
 
 async function runTest() {
-  await runScenario("no site_conditions payload", minimalCanonicalPayload, (estimate) =>
-    assertNoAllowances(estimate)
-  );
-  const payloadWithSiteConditions = { ...minimalCanonicalPayload, site_conditions: siteConditionsBlock };
-  await runScenario("with site_conditions payload", payloadWithSiteConditions, (estimate, res, payload) => {
+  let baselineWidth: number | null = null;
+  await runScenario("no site_conditions payload", minimalCanonicalPayload, (estimate) => {
+    assertNoAllowances(estimate);
+    const width = estimate.estimate_range.high_sek - estimate.estimate_range.low_sek;
+    if (width < 4000) throw new Error("Range width should respect minimum spread");
+    const low = estimate.estimate_range?.low_sek;
+    const mid = estimate.estimate_range?.mid_sek;
+    const high = estimate.estimate_range?.high_sek;
+    if (low == null || mid == null || high == null) {
+      throw new Error("Estimate range numbers missing");
+    }
+    if (!(low < mid && mid < high)) {
+      throw new Error("Estimate range values must stay ordered");
+    }
+    baselineWidth = width;
+  });
+  const measurementPayload = {
+    ...minimalCanonicalPayload,
+    measurementOverride: { length: 2.2, width: 3.1, area: 6.82, ceilingHeight: 2.4 },
+    roomMeasurements: {
+      floor_area_m2: 6.8,
+      wall_area_m2: 20,
+      ceiling_area_m2: 7,
+      wet_zone_wall_area_m2: 16,
+    },
+    site_conditions: siteConditionsBlock,
+  };
+  await runScenario("with site_conditions + measurements", measurementPayload, (estimate, res, payload) => {
     assertAllowancesPresent(estimate);
     assertMetadataEcho(res, payload.site_conditions as Record<string, unknown>);
+    const low = estimate.estimate_range?.low_sek;
+    const mid = estimate.estimate_range?.mid_sek;
+    const high = estimate.estimate_range?.high_sek;
+    if (low == null || mid == null || high == null) {
+      throw new Error("Estimate range numbers missing");
+    }
+    const width = high - low;
+    if (width < 4000) throw new Error("Tightened range should still obey minimum");
+    if (baselineWidth !== null && width >= baselineWidth) {
+      throw new Error("Range should tighten when confirmations are provided");
+    }
+    if (!(low < mid && mid < high)) {
+      throw new Error("Estimate range values must stay ordered");
+    }
   });
   console.log("Site conditions allowance regression test passed.");
 }

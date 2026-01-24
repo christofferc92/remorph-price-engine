@@ -20,6 +20,40 @@ export type SweepProfile = "refresh" | "full_rebuild" | "major";
 
 type MeasurementKey = "floor_area_m2" | "wall_area_m2" | "ceiling_area_m2" | "wet_zone_wall_area_m2";
 
+export type RangeSignals = {
+  measurement_confirmed: boolean;
+  room_measurement_ratio: number;
+  site_conditions_ratio: number;
+  needs_confirmation_ids: string[];
+};
+
+type RangeResult = {
+  low: number;
+  mid: number;
+  high: number;
+  applied_pct: number;
+  reason_codes: string[];
+};
+
+const TRADE_GROUP_UNCERTAINTY_PCT: Record<string, number> = {
+  demolition: 0.09,
+  carpentry_substrate: 0.08,
+  waterproofing: 0.07,
+  tiling_or_vinyl: 0.06,
+  plumbing: 0.08,
+  electrical: 0.07,
+  ventilation: 0.06,
+  painting: 0.05,
+  cleanup_waste: 0.05,
+  project_management_docs: 0.04,
+  site_conditions: 0.03,
+};
+
+const DEFAULT_UNCERTAINTY_PCT = 0.08;
+const MIN_RANGE_PCT = 0.03;
+const MAX_RANGE_PCT = 0.25;
+const MIN_RANGE_SEK = 2000;
+
 export function bucketFromFloorArea(area: number | null | undefined): SizeBucket {
   if (typeof area === "number" && !Number.isNaN(area)) {
     if (area < 4) return "under_4_sqm";
@@ -191,6 +225,26 @@ function roundToStep(value: number, step: number) {
   if (!value || value <= 0) return 0;
   return Math.round(value / step) * step;
 }
+
+const SITE_CONDITION_KEYS: Array<keyof SiteConditions> = [
+  "floor_elevator",
+  "carry_distance",
+  "parking_loading",
+  "work_time_restrictions",
+  "access_constraints_notes",
+  "permits_brf",
+  "wetroom_certificate_required",
+  "build_year_bucket",
+  "last_renovated",
+  "hazardous_material_risk",
+  "occupancy",
+  "must_keep_facility_running",
+  "container_possible",
+  "protection_level",
+  "water_shutoff_accessible",
+  "electrical_panel_accessible",
+  "recent_stambyte",
+];
 
 export function computeAnalysisContract(
   ai_raw: any,
@@ -498,6 +552,85 @@ function clamp01(value: number | null | undefined, fallback: number) {
   return Math.min(Math.max(value, 0), 1);
 }
 
+function deriveRangeSignals(contract: CanonicalEstimatorContract): RangeSignals {
+  const overrides = contract.measurementOverride;
+  const measurementConfirmed =
+    typeof overrides?.area === "number" ||
+    typeof overrides?.length === "number" ||
+    typeof overrides?.width === "number" ||
+    typeof overrides?.ceilingHeight === "number" ||
+    typeof overrides?.wetZone === "string";
+  const rooms = contract.roomMeasurements;
+  const measurements = [
+    rooms?.floor_area_m2,
+    rooms?.wall_area_m2,
+    rooms?.ceiling_area_m2,
+    rooms?.wet_zone_wall_area_m2,
+  ];
+  const completed = measurements.filter((value) => typeof value === "number" && !Number.isNaN(value)).length;
+  const roomMeasurementRatio = measurements.length > 0 ? completed / measurements.length : 0;
+  const siteConditions = contract.site_conditions;
+  const answeredSiteConditions = SITE_CONDITION_KEYS.filter((key) => siteConditions && siteConditions[key] != null).length;
+  const siteConditionsRatio = SITE_CONDITION_KEYS.length > 0 ? answeredSiteConditions / SITE_CONDITION_KEYS.length : 0;
+  return {
+    measurement_confirmed: measurementConfirmed,
+    room_measurement_ratio: roomMeasurementRatio,
+    site_conditions_ratio: siteConditionsRatio,
+    needs_confirmation_ids: [],
+  };
+}
+
+function computeRangeFromLineItems(
+  lineItems: EstimateResponse["tasks"],
+  signals: RangeSignals,
+  midTotal: number
+): RangeResult {
+  const totalSubtotals = lineItems.reduce((sum, item) => sum + Number(item.subtotal_sek ?? 0), 0);
+  const weighted = lineItems.reduce((sum, item) => {
+    const subtotal = Number(item.subtotal_sek ?? 0);
+    const pct = TRADE_GROUP_UNCERTAINTY_PCT[item.trade_group] ?? DEFAULT_UNCERTAINTY_PCT;
+    return sum + subtotal * pct;
+  }, 0);
+  const basePct = totalSubtotals > 0 ? weighted / totalSubtotals : DEFAULT_UNCERTAINTY_PCT;
+  let adjustedPct = Math.min(Math.max(basePct, MIN_RANGE_PCT), MAX_RANGE_PCT);
+  const reasons: string[] = [];
+  if (signals.measurement_confirmed) {
+    adjustedPct = Math.max(adjustedPct - 0.015, MIN_RANGE_PCT);
+    reasons.push("measurement_confirmed");
+  }
+  if (signals.room_measurement_ratio >= 0.75) {
+    adjustedPct = Math.max(adjustedPct - 0.015, MIN_RANGE_PCT);
+    reasons.push("room_measurements_complete");
+  } else if (signals.room_measurement_ratio >= 0.5) {
+    adjustedPct = Math.max(adjustedPct - 0.0075, MIN_RANGE_PCT);
+    reasons.push("room_measurements_partial");
+  }
+  if (signals.site_conditions_ratio >= 0.75) {
+    adjustedPct = Math.max(adjustedPct - 0.01, MIN_RANGE_PCT);
+    reasons.push("site_conditions_complete");
+  } else if (signals.site_conditions_ratio >= 0.5) {
+    adjustedPct = Math.max(adjustedPct - 0.005, MIN_RANGE_PCT);
+    reasons.push("site_conditions_partial");
+  }
+  if (signals.needs_confirmation_ids.length > 0) {
+    adjustedPct = Math.min(adjustedPct + 0.02, MAX_RANGE_PCT);
+    reasons.push("needs_confirmation");
+  }
+
+  const mid = Math.round(midTotal);
+  const minDelta = Math.max(MIN_RANGE_SEK, Math.round(mid * MIN_RANGE_PCT));
+  const delta = Math.max(Math.round(mid * adjustedPct), minDelta);
+  const low = Math.max(mid - delta, 0);
+  const high = mid + delta;
+  return {
+    low,
+    mid,
+    high,
+    applied_pct: adjustedPct,
+    reason_codes: reasons,
+  };
+}
+
 export function computeEstimateQuality(inputs: any, needs: string[]): "confirmed" | "semi_confirmed" | "rough" {
   const hasFloor = inputs.floor_area_m2?.value != null;
   const hasWet = inputs.wet_zone_wall_area_m2?.value != null;
@@ -553,99 +686,95 @@ function enforceMonotonicEstimates(low: number | null | undefined, mid: number |
 export function runEstimateFromNormalized(
   normalized: any,
   profile?: SweepProfile,
-  siteConditionsAllowances?: SiteConditionsAllowanceSummary | null
+  siteConditionsAllowances?: SiteConditionsAllowanceSummary | null,
+  rangeSignals?: RangeSignals
 ) {
-  const scenarios = ["low", "mid", "high"] as const;
   const ranges = normalized.inferred_ranges || {};
   const inputs = normalized.inputs || {};
-
-  const estimates: Record<string, EstimateResponse> = {} as Record<string, EstimateResponse>;
-  let midSekPerM2: number | null = null;
-
-  for (const key of scenarios) {
-    const floor = pickScenario(inputs?.floor_area_m2?.value, ranges.floor_area_m2, key);
-    const wall = pickScenario(inputs?.wall_area_m2?.value, ranges.wall_area_m2, key);
-    const ceiling = pickScenario(inputs?.ceiling_area_m2?.value, ranges.ceiling_area_m2 || ranges.floor_area_m2, key);
-    const wet = pickScenario(inputs?.wet_zone_wall_area_m2?.value, ranges.wet_zone_wall_area_m2, key);
-
-    const analysis: AnalysisResult = {
-      room_type: normalized.room.room_type,
-      confidence_room_type: normalized.room.confidence_room_type,
-      floor_area_m2: floor,
-      wall_area_m2: wall,
-      ceiling_area_m2: ceiling,
-      wet_zone_wall_area_m2: wet,
-      estimated_dimensions_notes_sv: normalized.room.estimated_dimensions_notes_sv || "",
-      visible_fixtures: normalized.room.visible_fixtures || {},
-      suggested_intents: normalized.intents,
-      needs_confirmation_ids: normalized.needs_confirmation_ids || [],
-      assumptions_sv: normalized.room.assumptions_sv || [],
-      building_year: normalized.room.building_year,
-    } as AnalysisResult;
-
-    const est = estimate({
-      analysis,
-      overrides: {},
-      intents: normalized.intents,
-      selections: normalized.selections,
-      profile,
-      site_conditions_allowances: siteConditionsAllowances ?? null,
-    });
-    (estimates as any)[key] = est;
-    if (key === "mid") midSekPerM2 = est.sek_per_m2;
-  }
-
-  const monotonicTotals = enforceMonotonicEstimates(
-    estimates.low?.totals?.grand_total_sek,
-    estimates.mid?.totals?.grand_total_sek,
-    estimates.high?.totals?.grand_total_sek
-  );
-
-  const lowLaborMaterial = summarizeLaborMaterialFromEstimate(estimates.low);
-  const midLaborMaterial = summarizeLaborMaterialFromEstimate(estimates.mid);
-  const highLaborMaterial = summarizeLaborMaterialFromEstimate(estimates.high);
-  const laborValues = [lowLaborMaterial.labor, midLaborMaterial.labor, highLaborMaterial.labor].map((value) =>
-    safeNumber(value)
-  );
-  const materialValues = [lowLaborMaterial.material, midLaborMaterial.material, highLaborMaterial.material].map((value) =>
-    safeNumber(value)
-  );
-  const totalsFromMid = estimates.mid?.totals ?? {
-    base_subtotal_sek: 0,
-    project_management_sek: 0,
-    contingency_sek: 0,
-    grand_total_sek: 0,
+  const signals: RangeSignals = {
+    measurement_confirmed: false,
+    room_measurement_ratio: 0,
+    site_conditions_ratio: 0,
+    needs_confirmation_ids: [],
+    ...(rangeSignals ?? {}),
   };
+
+  const floor = pickScenario(inputs?.floor_area_m2?.value, ranges.floor_area_m2, "mid");
+  const wall = pickScenario(inputs?.wall_area_m2?.value, ranges.wall_area_m2, "mid");
+  const ceiling = pickScenario(inputs?.ceiling_area_m2?.value, ranges.ceiling_area_m2 || ranges.floor_area_m2, "mid");
+  const wet = pickScenario(inputs?.wet_zone_wall_area_m2?.value, ranges.wet_zone_wall_area_m2, "mid");
+
+  const analysis: AnalysisResult = {
+    room_type: normalized.room.room_type,
+    confidence_room_type: normalized.room.confidence_room_type,
+    floor_area_m2: floor,
+    wall_area_m2: wall,
+    ceiling_area_m2: ceiling,
+    wet_zone_wall_area_m2: wet,
+    estimated_dimensions_notes_sv: normalized.room.estimated_dimensions_notes_sv || "",
+    visible_fixtures: normalized.room.visible_fixtures || {},
+    suggested_intents: normalized.intents,
+    needs_confirmation_ids: normalized.needs_confirmation_ids || [],
+    assumptions_sv: normalized.room.assumptions_sv || [],
+    building_year: normalized.room.building_year,
+  } as AnalysisResult;
+
+  const estimateResult = estimate({
+    analysis,
+    overrides: {},
+    intents: normalized.intents,
+    selections: normalized.selections,
+    profile,
+    site_conditions_allowances: siteConditionsAllowances ?? null,
+  });
+
+  signals.needs_confirmation_ids = estimateResult.needs_confirmation_ids || [];
+
+  const range = computeRangeFromLineItems(estimateResult.tasks, signals, estimateResult.totals?.grand_total_sek ?? 0);
+  const monotonicTotals = enforceMonotonicEstimates(range.low, range.mid, range.high);
+
+  const laborMaterial = summarizeLaborMaterialFromEstimate(estimateResult);
+  const laborRange = {
+    min_sek: Math.round(Math.max(laborMaterial.labor * (1 - range.applied_pct), 0)),
+    max_sek: Math.round(laborMaterial.labor * (1 + range.applied_pct)),
+  };
+  const materialRange = {
+    min_sek: Math.round(Math.max(laborMaterial.material * (1 - range.applied_pct), 0)),
+    max_sek: Math.round(laborMaterial.material * (1 + range.applied_pct)),
+  };
+
   const totalsWithBreakdown = {
-    ...totalsFromMid,
+    ...estimateResult.totals,
     min_total_sek: safeNumber(monotonicTotals.low),
     max_total_sek: safeNumber(monotonicTotals.high),
-    labor_min_sek: Math.min(...laborValues),
-    labor_max_sek: Math.max(...laborValues),
-    material_min_sek: Math.min(...materialValues),
-    material_max_sek: Math.max(...materialValues),
+    labor_min_sek: laborRange.min_sek,
+    labor_max_sek: laborRange.max_sek,
+    material_min_sek: materialRange.min_sek,
+    material_max_sek: materialRange.max_sek,
   };
+
+  const totalsSelection = pickTotals(estimateResult);
 
   return {
     estimate_range: {
-      low: pickTotals(estimates.low),
-      mid: pickTotals(estimates.mid),
-      high: pickTotals(estimates.high),
+      low: totalsSelection,
+      mid: totalsSelection,
+      high: totalsSelection,
     },
     estimate_low_sek: monotonicTotals.low,
     estimate_mid_sek: monotonicTotals.mid,
     estimate_high_sek: monotonicTotals.high,
     estimate_quality: normalized.estimate_quality || "rough",
-    needs_confirmation_ids: normalized.needs_confirmation_ids,
-    warnings: estimates.mid?.warnings || [],
-    tasks: estimates.mid?.tasks || [],
-    flags: estimates.mid?.flags || [],
-    trade_group_totals: estimates.mid?.trade_group_totals || [],
-    plausibility_band: estimates.mid?.plausibility_band || "",
-    sek_per_m2: midSekPerM2,
-    derived_areas: estimates.mid?.derived_areas || normalized.derived_areas,
+    needs_confirmation_ids: estimateResult.needs_confirmation_ids,
+    warnings: estimateResult.warnings || [],
+    tasks: estimateResult.tasks || [],
+    flags: estimateResult.flags || [],
+    trade_group_totals: estimateResult.trade_group_totals || [],
+    plausibility_band: estimateResult.plausibility_band || "",
+    sek_per_m2: estimateResult.sek_per_m2 ?? null,
+    derived_areas: estimateResult.derived_areas || normalized.derived_areas,
     totals: totalsWithBreakdown,
-    site_conditions_allowances: estimates.mid?.site_conditions_allowances ?? null,
+    site_conditions_allowances: estimateResult.site_conditions_allowances ?? null,
   } as any;
 }
 
@@ -923,7 +1052,13 @@ export function evaluateContract(
   const normalized = buildNormalizedFromContract(contract, options?.imageId, mapperResult);
   const profile = options?.profile ?? determineProfileFromOutcome(contract.outcome);
   const siteConditionsAllowances = computeSiteConditionsAllowances(contract.site_conditions);
-  const estimateResult = runEstimateFromNormalized(normalized, profile, siteConditionsAllowances);
+  const rangeSignals = deriveRangeSignals(contract);
+  const estimateResult = runEstimateFromNormalized(
+    normalized,
+    profile,
+    siteConditionsAllowances,
+    rangeSignals
+  );
   const flags = computeOutlierFlags(profile, estimateResult);
   const clientEstimate = buildFrontendEstimate(estimateResult, normalized, flags);
   return {

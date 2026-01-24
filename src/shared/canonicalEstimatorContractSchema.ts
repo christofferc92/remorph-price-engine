@@ -121,6 +121,48 @@ export const userOutcomeContractSchema = z
   })
   .strict();
 
+const siteConditionsSchema = z
+  .object({
+    floor_elevator: z
+      .enum([
+        "house_or_ground",
+        "apt_elevator",
+        "apt_no_elevator_1_2",
+        "apt_no_elevator_3_plus",
+        "unknown",
+      ])
+      .optional(),
+    carry_distance: z
+      .enum(["under_20m", "20_50m", "50_100m", "over_100m", "unknown"])
+      .optional(),
+    parking_loading: z.enum(["easy_nearby", "limited", "none", "unknown"]).optional(),
+    work_time_restrictions: z
+      .enum(["none", "standard_daytime", "strict", "unknown"])
+      .optional(),
+    access_constraints_notes: z.string().max(280).optional(),
+    permits_brf: z.enum(["none", "brf_required", "permit_required", "unknown"]).optional(),
+    wetroom_certificate_required: z
+      .enum(["required", "preferred", "not_needed", "unknown"])
+      .optional(),
+    build_year_bucket: z
+      .enum(["pre_1960", "1960_1979", "1980_1999", "2000_plus", "unknown"])
+      .optional(),
+    last_renovated: z.enum(["under_5y", "5_15y", "over_15y", "unknown"]).optional(),
+    hazardous_material_risk: z
+      .enum(["none_known", "suspected", "confirmed", "unknown"])
+      .optional(),
+    occupancy: z
+      .enum(["not_living_in", "living_in_full", "living_in_partly", "unknown"])
+      .optional(),
+    must_keep_facility_running: z.enum(["yes", "no", "unknown"]).optional(),
+    container_possible: z.enum(["yes", "no", "unknown"]).optional(),
+    protection_level: z.enum(["normal", "extra", "unknown"]).optional(),
+    water_shutoff_accessible: z.enum(["yes", "no", "unknown"]).optional(),
+    electrical_panel_accessible: z.enum(["yes", "no", "unknown"]).optional(),
+    recent_stambyte: z.enum(["yes", "no", "unknown"]).optional(),
+  })
+  .strict();
+
 export const canonicalEstimatorContractSchema = z
   .object({
     analysis: analysisContractSchema,
@@ -128,6 +170,7 @@ export const canonicalEstimatorContractSchema = z
     outcome: userOutcomeContractSchema,
     measurementOverride: measurementOverrideSchema.optional(),
     roomMeasurements: roomMeasurementsSchema.optional(),
+    site_conditions: siteConditionsSchema.optional(),
   })
   .strict();
 

@@ -30,6 +30,24 @@ Additional notes:
 - The body must satisfy `canonicalEstimatorContractSchema` from `src/shared/canonicalEstimatorContractSchema.ts:1-136`. That means it must contain an `analysis` object (room_type, bathroom size bucket + confidence, detected fixtures, layout/ceiling/condition/image-quality data, and an overall analysis confidence).
 - `overrides` is required and carries `{ bathroom_size_final, bathroom_size_source }` (defaults to `ai_estimated`). `measurementOverride` and `roomMeasurements` are optional and supply user-provided linear metrics if available.
 - `outcome` encodes all user-selectable intents/fixtures (shower, bathtub, toilet, vanity, wall/floor/ceiling finishes, layout change, and shower niches). `shower_niches` is auto-filled with `"none"` if the caller omits it (`apps/price-engine-service/src/server.ts:152-156`).
+- `site_conditions` (optional logistics/permits block). Every field inside is optional, it must match the listed enums, and `access_constraints_notes` is capped at 280 characters. Allowed keys/values:
+  - `floor_elevator`: `house_or_ground`, `apt_elevator`, `apt_no_elevator_1_2`, `apt_no_elevator_3_plus`, `unknown`.
+  - `carry_distance`: `under_20m`, `20_50m`, `50_100m`, `over_100m`, `unknown`.
+  - `parking_loading`: `easy_nearby`, `limited`, `none`, `unknown`.
+  - `work_time_restrictions`: `none`, `standard_daytime`, `strict`, `unknown`.
+  - `access_constraints_notes`: plain text (max 280 characters).
+  - `permits_brf`: `none`, `brf_required`, `permit_required`, `unknown`.
+  - `wetroom_certificate_required`: `required`, `preferred`, `not_needed`, `unknown`.
+  - `build_year_bucket`: `pre_1960`, `1960_1979`, `1980_1999`, `2000_plus`, `unknown`.
+  - `last_renovated`: `under_5y`, `5_15y`, `over_15y`, `unknown`.
+  - `hazardous_material_risk`: `none_known`, `suspected`, `confirmed`, `unknown`.
+  - `occupancy`: `not_living_in`, `living_in_full`, `living_in_partly`, `unknown`.
+  - `must_keep_facility_running`: `yes`, `no`, `unknown`.
+  - `container_possible`: `yes`, `no`, `unknown`.
+  - `protection_level`: `normal`, `extra`, `unknown`.
+  - `water_shutoff_accessible`: `yes`, `no`, `unknown`.
+  - `electrical_panel_accessible`: `yes`, `no`, `unknown`.
+  - `recent_stambyte`: `yes`, `no`, `unknown`.
 
 When canonical parsing fails, the server tries to adapt the payload as normalized analysis data. See the next subsection for that path.
 

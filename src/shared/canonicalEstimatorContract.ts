@@ -74,6 +74,26 @@ export type RoomMeasurements = {
   wet_zone_wall_area_m2: number | null;
 };
 
+export type SiteConditions = {
+  floor_elevator?: "house_or_ground" | "apt_elevator" | "apt_no_elevator_1_2" | "apt_no_elevator_3_plus" | "unknown";
+  carry_distance?: "under_20m" | "20_50m" | "50_100m" | "over_100m" | "unknown";
+  parking_loading?: "easy_nearby" | "limited" | "none" | "unknown";
+  work_time_restrictions?: "none" | "standard_daytime" | "strict" | "unknown";
+  access_constraints_notes?: string;
+  permits_brf?: "none" | "brf_required" | "permit_required" | "unknown";
+  wetroom_certificate_required?: "required" | "preferred" | "not_needed" | "unknown";
+  build_year_bucket?: "pre_1960" | "1960_1979" | "1980_1999" | "2000_plus" | "unknown";
+  last_renovated?: "under_5y" | "5_15y" | "over_15y" | "unknown";
+  hazardous_material_risk?: "none_known" | "suspected" | "confirmed" | "unknown";
+  occupancy?: "not_living_in" | "living_in_full" | "living_in_partly" | "unknown";
+  must_keep_facility_running?: "yes" | "no" | "unknown";
+  container_possible?: "yes" | "no" | "unknown";
+  protection_level?: "normal" | "extra" | "unknown";
+  water_shutoff_accessible?: "yes" | "no" | "unknown";
+  electrical_panel_accessible?: "yes" | "no" | "unknown";
+  recent_stambyte?: "yes" | "no" | "unknown";
+};
+
 export const WET_ZONE_FRACTIONS: Record<WetZoneType, number> = {
   shower_only: 0.25,
   corner_2_walls: 0.5,
@@ -126,6 +146,7 @@ export type CanonicalEstimatorContract = {
   outcome: UserOutcomeContract;
   measurementOverride?: MeasurementOverride;
   roomMeasurements?: RoomMeasurements;
+  site_conditions?: SiteConditions;
 };
 
 export const sizeBucketOptions: { value: SizeBucket; label: string }[] = [

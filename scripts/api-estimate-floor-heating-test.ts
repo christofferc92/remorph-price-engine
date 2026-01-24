@@ -49,6 +49,15 @@ const minimalCanonicalPayload = {
     shower_niches: "none",
     floor_heating: "floor_heating_on",
   },
+  site_conditions: {
+    floor_elevator: "apt_no_elevator_1_2",
+    carry_distance: "20_50m",
+    parking_loading: "limited",
+    work_time_restrictions: "standard_daytime",
+    permits_brf: "permit_required",
+    access_constraints_notes: "Building allows deliveries only after 08:30.",
+    occupancy: "living_in_partly",
+  },
 };
 
 async function runTest() {
@@ -122,6 +131,17 @@ async function runTest() {
     Math.max(Math.round(estimate.totals?.grand_total_sek ?? 0) - estimate.rot_summary.rot_deduction_sek, 0);
   if (expectedAfterRot !== estimate.rot_summary.total_after_rot_sek) {
     throw new Error("rot_summary.total_after_rot_sek mismatch");
+  }
+
+  const echoedSiteConditions = res._getJSONData()?.metadata?.contract?.site_conditions;
+  if (!echoedSiteConditions) {
+    throw new Error("Response missing metadata.contract.site_conditions");
+  }
+  const expectedSiteConditions = minimalCanonicalPayload.site_conditions;
+  for (const [key, value] of Object.entries(expectedSiteConditions || {})) {
+    if (echoedSiteConditions[key as keyof typeof echoedSiteConditions] !== value) {
+      throw new Error(`Site conditions mismatch for ${key}`);
+    }
   }
 
   console.log("POST /api/estimate accepted canonical payload with floor_heating.");

@@ -60,6 +60,9 @@ task_rates:
   ceiling_panels_allowance: { unit: "item", labor_sek_per_unit: 1800, material_sek_per_unit: 1200, min_charge_sek: 0 }
   ceiling_sloped_allowance: { unit: "item", labor_sek_per_unit: 1200, material_sek_per_unit: 0, min_charge_sek: 0 }
   shower_niche_allowance: { unit: "item", labor_sek_per_unit: 1200, material_sek_per_unit: 400, min_charge_sek: 0 }
+  site_conditions_access_labor_hours: { unit: "hour", labor_sek_per_unit: 1250, material_sek_per_unit: 0, min_charge_sek: 0 }
+  site_conditions_waste_logistics_hours: { unit: "hour", labor_sek_per_unit: 1250, material_sek_per_unit: 0, min_charge_sek: 0 }
+  site_conditions_admin_hours: { unit: "hour", labor_sek_per_unit: 1150, material_sek_per_unit: 0, min_charge_sek: 0 }
 
 overhead:
   project_management_pct: 0.07

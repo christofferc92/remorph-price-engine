@@ -1,9 +1,18 @@
 import { mapOutcomeToEstimatorInputs } from "../estimator/outcomeMapper.ts";
 import type { IntentMap } from "../estimator/scopeCompiler.ts";
-import type { AnalysisResult, EstimateResponse, Selection } from "../estimator/estimator.ts";
+import type {
+  AnalysisResult,
+  EstimateResponse,
+  Selection,
+  SiteConditionsAllowanceSummary,
+} from "../estimator/estimator.ts";
 import { estimate } from "../estimator/estimator.ts";
 import { bucketToArea, WET_ZONE_FRACTIONS } from "../../../src/shared/canonicalEstimatorContract.ts";
-import type { CanonicalEstimatorContract, SizeBucket } from "../../../src/shared/canonicalEstimatorContract.ts";
+import type {
+  CanonicalEstimatorContract,
+  SiteConditions,
+  SizeBucket,
+} from "../../../src/shared/canonicalEstimatorContract.ts";
 
 const DEFAULT_CEILING_HEIGHT = 2.4;
 
@@ -59,6 +68,128 @@ export function computeDetectedFixtures(raw: any) {
     toilet_present: typeof raw?.toilet === "number" && raw.toilet > 0,
     sink_present: typeof raw?.sink === "number" && raw.sink > 0,
   };
+}
+
+function computeSiteConditionsAllowances(siteConditions?: SiteConditions): SiteConditionsAllowanceSummary | null {
+  if (!siteConditions) return null;
+  let access = 0;
+  let waste = 0;
+  let admin = 0;
+  const reasons = new Set<string>();
+
+  const add = (target: "access" | "waste" | "admin", amount: number, code: string) => {
+    if (amount > 0) {
+      if (target === "access") access += amount;
+      if (target === "waste") waste += amount;
+      if (target === "admin") admin += amount;
+      reasons.add(code);
+    }
+  };
+
+  switch (siteConditions.floor_elevator) {
+    case "apt_elevator":
+      add("access", 0.5, "FLOOR_ELEVATOR");
+      break;
+    case "apt_no_elevator_1_2":
+      add("access", 1.5, "FLOOR_NO_ELEVATOR_1_2");
+      break;
+    case "apt_no_elevator_3_plus":
+      add("access", 3.0, "FLOOR_NO_ELEVATOR_3_PLUS");
+      break;
+  }
+  switch (siteConditions.carry_distance) {
+    case "20_50m":
+      add("waste", 1.0, "CARRY_20_50M");
+      break;
+    case "50_100m":
+      add("waste", 2.0, "CARRY_50_100M");
+      break;
+    case "over_100m":
+      add("waste", 3.5, "CARRY_OVER_100M");
+      break;
+  }
+  switch (siteConditions.parking_loading) {
+    case "limited":
+      add("access", 0.5, "PARKING_LIMITED");
+      break;
+    case "none":
+      add("access", 1.5, "PARKING_NONE");
+      break;
+  }
+  if (siteConditions.work_time_restrictions === "strict") {
+    add("access", 1.5, "WORKTIME_STRICT");
+  }
+  if (siteConditions.access_constraints_notes?.trim()) {
+    reasons.add("ACCESS_NOTES");
+  }
+  switch (siteConditions.permits_brf) {
+    case "brf_required":
+      add("admin", 2.0, "BRF_REQUIRED");
+      break;
+    case "permit_required":
+      add("admin", 4.0, "PERMIT_REQUIRED");
+      break;
+  }
+  switch (siteConditions.hazardous_material_risk) {
+    case "suspected":
+      add("admin", 3.0, "HAZARD_SUSPECTED");
+      break;
+    case "confirmed":
+      add("admin", 8.0, "HAZARD_CONFIRMED");
+      break;
+  }
+  switch (siteConditions.build_year_bucket) {
+    case "pre_1960":
+      add("admin", 2.0, "BUILD_PRE_1960");
+      break;
+    case "1960_1979":
+      add("admin", 1.0, "BUILD_1960_1979");
+      break;
+  }
+  switch (siteConditions.occupancy) {
+    case "living_in_partly":
+      add("waste", 1.0, "OCCUPANCY_PARTLY");
+      break;
+    case "living_in_full":
+      add("waste", 2.5, "OCCUPANCY_FULL");
+      break;
+  }
+  switch (siteConditions.container_possible) {
+    case "no":
+      add("waste", 2.0, "NO_CONTAINER");
+      break;
+  }
+  if (siteConditions.must_keep_facility_running === "yes") {
+    add("waste", 3.0, "KEEP_RUNNING_YES");
+  }
+  if (siteConditions.protection_level === "extra") {
+    add("waste", 1.5, "PROTECTION_EXTRA");
+  }
+  if (siteConditions.water_shutoff_accessible === "no") {
+    add("access", 0.5, "WATER_SHUTOFF_NO");
+  }
+  if (siteConditions.electrical_panel_accessible === "no") {
+    add("access", 0.5, "ELECTRICAL_PANEL_NO");
+  }
+
+  access = roundToStep(access, 0.5);
+  waste = roundToStep(waste, 0.5);
+  admin = roundToStep(admin, 0.5);
+
+  if (access === 0 && waste === 0 && admin === 0) {
+    return null;
+  }
+  return {
+    access_hours: access,
+    waste_hours: waste,
+    admin_hours: admin,
+    reason_codes: Array.from(reasons),
+  };
+}
+
+function roundToStep(value: number, step: number) {
+  if (!value || value <= 0) return 0;
+  return Math.round(value / step) * step;
 }
 
 export function computeAnalysisContract(
@@ -419,7 +550,11 @@ function enforceMonotonicEstimates(low: number | null | undefined, mid: number |
   return { low: minVal, mid: midClamped, high: maxVal };
 }
 
-export function runEstimateFromNormalized(normalized: any, profile?: SweepProfile) {
+export function runEstimateFromNormalized(
+  normalized: any,
+  profile?: SweepProfile,
+  siteConditionsAllowances?: SiteConditionsAllowanceSummary | null
+) {
   const scenarios = ["low", "mid", "high"] as const;
   const ranges = normalized.inferred_ranges || {};
   const inputs = normalized.inputs || {};
@@ -454,6 +589,7 @@ export function runEstimateFromNormalized(normalized: any, profile?: SweepProfil
       intents: normalized.intents,
       selections: normalized.selections,
       profile,
+      site_conditions_allowances: siteConditionsAllowances ?? null,
     });
     (estimates as any)[key] = est;
     if (key === "mid") midSekPerM2 = est.sek_per_m2;
@@ -509,6 +645,7 @@ export function runEstimateFromNormalized(normalized: any, profile?: SweepProfil
     sek_per_m2: midSekPerM2,
     derived_areas: estimates.mid?.derived_areas || normalized.derived_areas,
     totals: totalsWithBreakdown,
+    site_conditions_allowances: estimates.mid?.site_conditions_allowances ?? null,
   } as any;
 }
 
@@ -673,6 +810,32 @@ function computeRotSummary(
   };
 }
 
+const SITE_CONDITION_TASK_KEYS = new Set([
+  "site_conditions_access_labor_hours",
+  "site_conditions_waste_logistics_hours",
+  "site_conditions_admin_hours",
+]);
+
+function summarizeSiteConditionsEffect(
+  lineItems: Array<{ key: string; labor_sek: number; material_sek: number; subtotal_sek: number }>,
+  reasonCodes: string[]
+) {
+  const allowances = lineItems.filter((item) => SITE_CONDITION_TASK_KEYS.has(item.key));
+  if (!allowances.length) {
+    return undefined;
+  }
+  const addedLabor = Math.round(allowances.reduce((sum, item) => sum + Number(item.labor_sek ?? 0), 0));
+  const addedMaterial = Math.round(allowances.reduce((sum, item) => sum + Number(item.material_sek ?? 0), 0));
+  const addedTotal = Math.round(allowances.reduce((sum, item) => sum + Number(item.subtotal_sek ?? 0), 0));
+  const uniqueReasons = Array.from(new Set(reasonCodes.filter(Boolean)));
+  return {
+    added_labor_sek: addedLabor,
+    added_material_sek: addedMaterial,
+    added_total_sek: addedTotal,
+    reason_codes: uniqueReasons,
+  };
+}
+
 export function buildFrontendEstimate(
   estimateResult: any,
   normalized: any,
@@ -723,6 +886,10 @@ export function buildFrontendEstimate(
     outlier_flags: flags?.outlier_flags,
   });
   const rot_summary = computeRotSummary(line_items, estimateResult.totals);
+  const site_conditions_effect = summarizeSiteConditionsEffect(
+    line_items,
+    estimateResult.site_conditions_allowances?.reason_codes || []
+  );
   return {
     line_items,
     totals,
@@ -744,6 +911,7 @@ export function buildFrontendEstimate(
     confidence_tier,
     confidence_reasons,
     rot_summary,
+    site_conditions_effect,
   };
 }
 
@@ -754,7 +922,8 @@ export function evaluateContract(
   const mapperResult = mapOutcomeToEstimatorInputs(contract.outcome);
   const normalized = buildNormalizedFromContract(contract, options?.imageId, mapperResult);
   const profile = options?.profile ?? determineProfileFromOutcome(contract.outcome);
-  const estimateResult = runEstimateFromNormalized(normalized, profile);
+  const siteConditionsAllowances = computeSiteConditionsAllowances(contract.site_conditions);
+  const estimateResult = runEstimateFromNormalized(normalized, profile, siteConditionsAllowances);
   const flags = computeOutlierFlags(profile, estimateResult);
   const clientEstimate = buildFrontendEstimate(estimateResult, normalized, flags);
   return {

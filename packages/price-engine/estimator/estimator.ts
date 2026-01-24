@@ -53,6 +53,14 @@ export type EstimateRequest = {
   intents: IntentMap;
   selections: Selection;
   profile?: "refresh" | "full_rebuild" | "major";
+  site_conditions_allowances?: SiteConditionsAllowanceSummary | null;
+};
+
+export type SiteConditionsAllowanceSummary = {
+  access_hours: number;
+  waste_hours: number;
+  admin_hours: number;
+  reason_codes: string[];
 };
 
 export type TaskLine = {
@@ -82,6 +90,7 @@ export type EstimateResponse = {
   warnings: string[];
   needs_confirmation_ids: string[];
   derived_areas: { non_tiled_wall_area_m2: number | null };
+  site_conditions_allowances?: SiteConditionsAllowanceSummary | null;
 };
 
 type AreaField = "floor_area_m2" | "wall_area_m2" | "ceiling_area_m2" | "wet_zone_wall_area_m2";
@@ -123,6 +132,10 @@ export function estimate(payload: EstimateRequest): EstimateResponse {
     needsConfirmations,
     surfacesChanged,
   });
+  const allowanceLines = buildSiteConditionAllowanceLines(payload.site_conditions_allowances, rateCard);
+  if (allowanceLines.length > 0) {
+    tasks.push(...allowanceLines);
+  }
 
   const base_subtotal_sek = tasks.reduce((sum, t) => sum + t.subtotal_sek, 0);
   const project_management_pct = flags.has("requires_project_management") ? rateCard.overhead.project_management_pct : 0;
@@ -149,6 +162,7 @@ export function estimate(payload: EstimateRequest): EstimateResponse {
     warnings,
     needs_confirmation_ids: Array.from(needsConfirmations),
     derived_areas,
+    site_conditions_allowances: payload.site_conditions_allowances ?? null,
   };
 }
 
@@ -713,6 +727,46 @@ function summarizeTradeGroups(tasks: TaskLine[]) {
     trade_group,
     subtotal_sek: round(subtotal_sek),
   }));
+}
+
+const SITE_CONDITION_TASK_CONFIG: Record<string, { trade_group: string; rot_eligible: boolean }> = {
+  site_conditions_access_labor_hours: { trade_group: "site_conditions", rot_eligible: true },
+  site_conditions_waste_logistics_hours: { trade_group: "site_conditions", rot_eligible: true },
+  site_conditions_admin_hours: { trade_group: "site_conditions", rot_eligible: false },
+};
+
+function buildSiteConditionAllowanceLines(
+  allowances: SiteConditionsAllowanceSummary | null | undefined,
+  rateCard: RateCard
+): TaskLine[] {
+  if (!allowances) return [];
+  const entries: Array<[string, number]> = [
+    ["site_conditions_access_labor_hours", allowances.access_hours],
+    ["site_conditions_waste_logistics_hours", allowances.waste_hours],
+    ["site_conditions_admin_hours", allowances.admin_hours],
+  ];
+  const lines: TaskLine[] = [];
+  for (const [taskKey, qty] of entries) {
+    if (!qty || qty <= 0) continue;
+    const rate = rateCard.task_rates[taskKey];
+    if (!rate) continue;
+    const config = SITE_CONDITION_TASK_CONFIG[taskKey];
+    const labor = round(qty * rate.labor_sek_per_unit);
+    const material = round(qty * rate.material_sek_per_unit);
+    const subtotal = Math.max(round(qty * (rate.labor_sek_per_unit + rate.material_sek_per_unit)), rate.min_charge_sek ?? 0);
+    lines.push({
+      task_key: taskKey,
+      trade_group: config?.trade_group ?? "site_conditions",
+      qty: round(qty),
+      unit: rate.unit ?? "hour",
+      labor_sek: labor,
+      material_sek: material,
+      subtotal_sek: subtotal,
+      note: undefined,
+      rot_eligible: config?.rot_eligible ?? false,
+    });
+  }
+  return lines;
 }
 
 type PlausibilityProfile = "refresh" | "full_rebuild" | "major" | undefined;

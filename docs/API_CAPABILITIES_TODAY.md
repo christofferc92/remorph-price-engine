@@ -134,19 +134,47 @@ When canonical parsing fails, the server tries to adapt the payload as normalize
 Every success returns `{ id, estimate, metadata, record }` (see `apps/price-engine-service/src/server.ts:252-266`).
 - `id` is a UUID or timestamp-based fallback from `createResultId()` (`server.ts:218-221`).
 - `estimate` is the result of `buildFrontendEstimate` (`packages/price-engine/src/contract.ts:535-574`) and includes:
-  - `line_items[]`: each entry mirrors rate-card tasks with `key`, `trade_group`, `qty`, `unit`, `labor_sek`, `material_sek`, `subtotal_sek`, `rot_eligible`, and optional `note` for floor/wall finish details (`contract.ts:575-606`).
-  - `totals`: base subtotal + project management (from `rateCard.overhead.project_management_pct`) + contingency (8% by default).
+- `line_items[]`: each entry mirrors rate-card tasks with `key`, `trade_group`, `qty`, `unit`, `labor_sek`, `material_sek`, `subtotal_sek`, `rot_eligible`, and optional `note` for floor/wall finish details (`contract.ts:575-606`).
+- `/site_conditions` driven allowances: `site_conditions_access_labor_hours` (ROT-eligible), `site_conditions_waste_logistics_hours` (ROT-eligible), and `site_conditions_admin_hours` (non-ROT) now appear under `trade_group: site_conditions` when `site_conditions` is supplied. Their hourly labor rate comes from `packages/price-engine/estimator/ratecard.placeholder.yaml` and the tasks are defined in `catalog/bathroom_catalog.yaml`, so the line items pass through the normal estimator pipeline.
+- `totals`: base subtotal + project management (from `rateCard.overhead.project_management_pct`) + contingency (8% by default).
   - `trade_group_totals`, `flags`, `info_flags` (outlier metadata), `assumptions`, `warnings`, `needs_confirmation_ids`, `derived_areas` (`non_tiled_wall_area_m2`), `plausibility_band`, and `sek_per_m2` (all coming from the estimator pipeline, see `packages/price-engine/src/contract.ts:411-574`).
   - `estimate_quality` / `estimate_range` / `labor_range` / `material_range` mirror the ranges computed in `runEstimateFromNormalized`, so the UI has low/mid/high totals plus labor/material swings without recomputing (`contract.ts:426-516`).
   - `confidence_tier` / `confidence_reasons` distill estimate quality, AI/image confidence, blocking needs, and warnings into a single server-side “truth” (`contract.ts:520-614`).
-  - `rot_summary` reports ROT-eligible labor sums and the deduction (with an optional cap trace) while leaving the estimator totals untouched (`contract.ts:575-614`).
-  - There is no explicit confidence range or probability envelope—the response relies on `sek_per_m2`, `plausibility_band`, and `warnings` instead (“not returned today”).
+- `rot_summary` reports ROT-eligible labor sums and the deduction (with an optional cap trace) while leaving the estimator totals untouched (`contract.ts:575-614`).
+- There is no explicit confidence range or probability envelope—the response relies on `sek_per_m2`, `plausibility_band`, and `warnings` instead (“not returned today”).
+### Site conditions allowances
+When the client sends `site_conditions`, the estimator converts the inputs into three hourly allowance tasks (`site_conditions_access_labor_hours`, `site_conditions_waste_logistics_hours`, `site_conditions_admin_hours`). The tasks live in `catalog/bathroom_catalog.yaml` under `trade_group: site_conditions` and re-use the hourly labor rates defined in `packages/price-engine/estimator/ratecard.placeholder.yaml`, so their labor/material/subtotal flow through the usual task/rate-card pipeline. Hours are rounded to 0.5-hour steps and the response includes `estimate.site_conditions_effect` summarizing the added labor/material/total SEK plus the `reason_codes` shown below.
+
+- **Access allowances (access labor hours)**
+  - `floor_elevator`: `apt_elevator` (+0.5h, `FLOOR_ELEVATOR`), `apt_no_elevator_1_2` (+1.5h, `FLOOR_NO_ELEVATOR_1_2`), `apt_no_elevator_3_plus` (+3h, `FLOOR_NO_ELEVATOR_3_PLUS`)
+  - `parking_loading`: `limited` (+0.5h, `PARKING_LIMITED`), `none` (+1.5h, `PARKING_NONE`)
+  - `work_time_restrictions`: `strict` (+1.5h, `WORKTIME_STRICT`)
+  - `water_shutoff_accessible`: `no` (+0.5h, `WATER_SHUTOFF_NO`)
+  - `electrical_panel_accessible`: `no` (+0.5h, `ELECTRICAL_PANEL_NO`)
+  - `access_constraints_notes`: adds the `ACCESS_NOTES` code even though no hours are attached.
+
+ - **Waste/logistics allowances (waste logistics hours)**
+   - `carry_distance`: `20_50m` (+1h, `CARRY_20_50M`), `50_100m` (+2h, `CARRY_50_100M`), `over_100m` (+3.5h, `CARRY_OVER_100M`)
+   - `occupancy`: `living_in_partly` (+1h, `OCCUPANCY_PARTLY`), `living_in_full` (+2.5h, `OCCUPANCY_FULL`)
+   - `container_possible`: `no` (+2h, `NO_CONTAINER`)
+   - `must_keep_facility_running`: `yes` (+3h, `KEEP_RUNNING_YES`)
+   - `protection_level`: `extra` (+1.5h, `PROTECTION_EXTRA`)
+
+   Waste hours accumulate each matching bullet, so multiple answers stack (e.g., `container_possible=no` plus `must_keep_facility_running=yes` adds 5h total).
+
+- **Admin/documentation allowances (admin hours)**
+  - `permits_brf`: `brf_required` (+2h, `BRF_REQUIRED`), `permit_required` (+4h, `PERMIT_REQUIRED`)
+  - `hazardous_material_risk`: `suspected` (+3h, `HAZARD_SUSPECTED`), `confirmed` (+8h, `HAZARD_CONFIRMED`)
+  - `build_year_bucket`: `pre_1960` (+2h, `BUILD_PRE_1960`), `1960_1979` (+1h, `BUILD_1960_1979`)
+
+Only the fields above change hours today; other enums (e.g., `build_year_bucket` values after 1999, `wetroom_certificate_required`, `recent_stambyte`) do not add extra hours. Reason codes flow through `site_conditions_effect.reason_codes` so the UI can explain which answers drove the allowance.
+  - `site_conditions_effect` (present only when allowances are added) summarizes the labor/material/total SEK pulled from the three site condition tasks and echoes the `reason_codes` that explain why the allowances fired (`contract.ts:676-740`). Expected codes follow the table below, and `ACCESS_NOTES` is added whenever `access_constraints_notes` is provided even though it does not add hours.
 - `metadata` includes the normalized contract that was processed plus `overrides`, `text`, and `fileCount` placeholders (always `text = ""`, `fileCount = 0`).
 - `record` is currently always `null`.
 
 **Representative example response** (values are consistent with the canonical schema but simplified for readability):
-```json
-{
+  ```json
+  {
   "id": "estimate-2024-09-01-abc123",
   "estimate": {
     "line_items": [

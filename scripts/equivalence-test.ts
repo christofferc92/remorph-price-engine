@@ -66,7 +66,7 @@ for (const filename of filenames) {
 
   const profile = determineProfileFromOutcome(contract.outcome);
   const normalized = buildNormalizedFromContract(contract, imageId);
-  const referenceEstimate = runEstimateFromNormalized(normalized, profile);
+  const referenceEstimate = runEstimateFromNormalized(normalized, profile, null);
   const referenceFlags = computeOutlierFlags(profile, referenceEstimate);
   const originalResponse = buildFrontendEstimate(referenceEstimate, normalized, referenceFlags);
 

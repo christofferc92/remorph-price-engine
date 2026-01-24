@@ -49,22 +49,34 @@ const minimalCanonicalPayload = {
     shower_niches: "none",
     floor_heating: "floor_heating_on",
   },
-  site_conditions: {
-    floor_elevator: "apt_no_elevator_1_2",
-    carry_distance: "20_50m",
-    parking_loading: "limited",
-    work_time_restrictions: "standard_daytime",
-    permits_brf: "permit_required",
-    access_constraints_notes: "Building allows deliveries only after 08:30.",
-    occupancy: "living_in_partly",
-  },
 };
 
-async function runTest() {
+const siteConditionsBlock = {
+  floor_elevator: "apt_no_elevator_1_2",
+  carry_distance: "20_50m",
+  parking_loading: "limited",
+  work_time_restrictions: "strict",
+  permits_brf: "permit_required",
+  access_constraints_notes: "Deliveries only after 08:30.",
+  occupancy: "living_in_partly",
+  container_possible: "no",
+};
+
+const ALLOWANCE_TASK_KEYS = new Set([
+  "site_conditions_access_labor_hours",
+  "site_conditions_waste_logistics_hours",
+  "site_conditions_admin_hours",
+]);
+
+async function runScenario(
+  description: string,
+  payload: Record<string, unknown>,
+  expectation: (estimate: any, res: ReturnType<typeof createResponse>, payload: Record<string, unknown>) => void
+) {
   const req = createRequest({
     method: "POST",
     url: "/api/estimate",
-    body: minimalCanonicalPayload,
+    body: JSON.parse(JSON.stringify(payload)),
     headers: { "content-type": "application/json" },
   });
   const res = createResponse({ eventEmitter: EventEmitter });
@@ -81,6 +93,13 @@ async function runTest() {
   if (!estimate) {
     throw new Error("Response missing estimate payload");
   }
+
+  assertEstimateBasics(estimate);
+  expectation(estimate, res, payload);
+  console.log(`Scenario passed: ${description}`);
+}
+
+function assertEstimateBasics(estimate: any) {
   const assertInteger = (value: unknown, label: string) => {
     if (typeof value !== "number" || !Number.isInteger(value)) {
       throw new Error(`Expected integer for ${label}, got ${value}`);
@@ -112,12 +131,13 @@ async function runTest() {
   if (!estimate.rot_summary) {
     throw new Error("rot_summary missing");
   }
-  if (!estimate.line_items.some((item) => typeof item.rot_eligible === "boolean")) {
+  if (!estimate.line_items.some((item: any) => typeof item.rot_eligible === "boolean")) {
     throw new Error("line_items missing rot_eligible flag");
   }
+
   const eligibleLabor = estimate.line_items
-    .filter((item) => item.rot_eligible)
-    .reduce((sum, item) => sum + Math.round(item.labor_sek ?? 0), 0);
+    .filter((item: any) => item.rot_eligible)
+    .reduce((sum: number, item: any) => sum + Math.round(item.labor_sek ?? 0), 0);
   if (eligibleLabor !== estimate.rot_summary.rot_eligible_labor_sek) {
     throw new Error("rot_summary.rot_eligible_labor_sek seems off");
   }
@@ -132,20 +152,61 @@ async function runTest() {
   if (expectedAfterRot !== estimate.rot_summary.total_after_rot_sek) {
     throw new Error("rot_summary.total_after_rot_sek mismatch");
   }
+}
 
-  const echoedSiteConditions = res._getJSONData()?.metadata?.contract?.site_conditions;
-  if (!echoedSiteConditions) {
+function assertNoAllowances(estimate: any) {
+  const allowanceItems = (estimate.line_items || []).filter((item: any) => ALLOWANCE_TASK_KEYS.has(item.key));
+  if (allowanceItems.length) {
+    throw new Error("Unexpected site condition allowance line items when none were provided");
+  }
+  if (estimate.site_conditions_effect) {
+    throw new Error("site_conditions_effect should be absent when no site_conditions were provided");
+  }
+}
+
+function assertAllowancesPresent(estimate: any) {
+  const allowanceItems = (estimate.line_items || []).filter((item: any) =>
+    ALLOWANCE_TASK_KEYS.has(item.key)
+  );
+  if (allowanceItems.length === 0) {
+    throw new Error("Expected site condition allowance line items but found none");
+  }
+  const effect = estimate.site_conditions_effect;
+  if (!effect) {
+    throw new Error("site_conditions_effect missing despite site_conditions input");
+  }
+  const totalSubtotal = allowanceItems.reduce((sum: number, item: any) => sum + Number(item.subtotal_sek ?? 0), 0);
+  if (effect.added_total_sek !== Math.round(totalSubtotal)) {
+    throw new Error("site_conditions_effect.total does not match allowance line items");
+  }
+  const reasonSet = new Set(effect.reason_codes || []);
+  if (!reasonSet.has("FLOOR_NO_ELEVATOR_1_2") || !reasonSet.has("PERMIT_REQUIRED")) {
+    throw new Error("site_conditions_effect missing expected reason codes");
+  }
+}
+
+function assertMetadataEcho(res: ReturnType<typeof createResponse>, expectedSiteConditions: Record<string, unknown>) {
+  const echoed = res._getJSONData()?.metadata?.contract?.site_conditions;
+  if (!echoed) {
     throw new Error("Response missing metadata.contract.site_conditions");
   }
-  const expectedSiteConditions = minimalCanonicalPayload.site_conditions;
-  for (const [key, value] of Object.entries(expectedSiteConditions || {})) {
-    if (echoedSiteConditions[key as keyof typeof echoedSiteConditions] !== value) {
-      throw new Error(`Site conditions mismatch for ${key}`);
+  for (const [key, value] of Object.entries(expectedSiteConditions)) {
+    if (echoed[key as keyof typeof echoed] !== value) {
+      throw new Error(`Site conditions metadata mismatch for ${key}`);
     }
   }
+}
 
-  console.log("POST /api/estimate accepted canonical payload with floor_heating.");
-  console.log("Response id:", res._getJSONData()?.id);
+async function runTest() {
+  await runScenario("no site_conditions payload", minimalCanonicalPayload, (estimate) =>
+    assertNoAllowances(estimate)
+  );
+  const payloadWithSiteConditions = { ...minimalCanonicalPayload, site_conditions: siteConditionsBlock };
+  await runScenario("with site_conditions payload", payloadWithSiteConditions, (estimate, res, payload) => {
+    assertAllowancesPresent(estimate);
+    assertMetadataEcho(res, payload.site_conditions as Record<string, unknown>);
+  });
+  console.log("Site conditions allowance regression test passed.");
 }
 
 runTest().catch((error) => {

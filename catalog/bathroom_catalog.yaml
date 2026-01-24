@@ -448,6 +448,24 @@ tasks:
     qty_rules_source_ids: ["QD-011"]
     source_ids: ["TK-PM-001"]
 
+  - task_key: site_conditions_access_labor_hours
+    trade_group: site_conditions
+    rot_eligible: true
+    qty_driver: fixed_item
+    source_ids: ["SC-001"]
+
+  - task_key: site_conditions_waste_logistics_hours
+    trade_group: site_conditions
+    rot_eligible: true
+    qty_driver: fixed_item
+    source_ids: ["SC-002"]
+
+  - task_key: site_conditions_admin_hours
+    trade_group: site_conditions
+    rot_eligible: false
+    qty_driver: fixed_item
+    source_ids: ["SC-003"]
+
 sanity_checks:
   plausibility_bands_source_ids: ["PB-001", "PB-002", "PB-003", "PB-004", "PB-005", "PB-006", "PB-007"]
   needs_confirmation_source_ids: ["NC-001", "NC-002", "NC-003", "NC-004", "NC-005"]

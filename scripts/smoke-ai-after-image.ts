@@ -27,12 +27,12 @@ async function runAfterImageSmokeTest() {
     const imageBuffer = fs.readFileSync(imagePath);
     const blob = new Blob([imageBuffer], { type: 'image/jpeg' });
 
-    // Create form data
+    // Create form data with 'image' field name (preferred)
     const formData = new FormData();
-    formData.append('before_image', blob, path.basename(imagePath));
+    formData.append('image', blob, path.basename(imagePath));
     formData.append('description', 'Modern Swedish bathroom renovation with white tiles and glass shower');
 
-    console.log('\n[1/1] Calling /after-image...');
+    console.log('\n[1/1] Calling /after-image with field name "image"...');
 
     try {
         const res = await fetch(`${API_BASE}/after-image`, {
@@ -47,9 +47,25 @@ async function runAfterImageSmokeTest() {
 
         const result = await res.json();
 
+        // Assertions
+        if (!result.after_image_base64) {
+            throw new Error('Response missing after_image_base64 field');
+        }
+
+        if (!result.mime_type) {
+            throw new Error('Response missing mime_type field');
+        }
+
+        if (result.after_image_base64.length < 10000) {
+            throw new Error(`Base64 length too short: ${result.after_image_base64.length} (expected > 10000)`);
+        }
+
         console.log('✅ After-image generation successful!');
         console.log(`MIME Type: ${result.mime_type}`);
         console.log(`Base64 Length: ${result.after_image_base64.length} characters`);
+        console.log(`Provider: ${result.provider || 'unknown'}`);
+        console.log(`Model: ${result.model || 'unknown'}`);
+        console.log(`Latency: ${result.latency_ms || 'unknown'} ms`);
 
         // Decode base64 and save to file
         const imageData = Buffer.from(result.after_image_base64, 'base64');
@@ -61,7 +77,8 @@ async function runAfterImageSmokeTest() {
         console.log(`📁 Saved to: ${outputPath}`);
         console.log(`📊 File size: ${imageData.length} bytes (${(imageData.length / 1024).toFixed(2)} KB)`);
 
-        console.log('\n--- SMOKE TEST PASSED ---');
+        console.log('\n✅ All assertions passed');
+        console.log('--- SMOKE TEST PASSED ---');
     } catch (err: any) {
         console.error('❌ After-image generation failed:', err.message);
         process.exit(1);

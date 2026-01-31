@@ -405,8 +405,9 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 
 if (process.env.NODE_ENV !== "test") {
   const port = Number(process.env.PORT || 3000);
-  app.listen(port, "0.0.0.0", () => {
-    console.log(`Price engine service ready on port ${port}`);
+  // Listen on IPv6 "::" to allow both IPv4 and IPv6 connections (Fly.io uses IPv6 internal networking)
+  app.listen(port, "::", () => {
+    console.log(`Price engine service ready on port ${port} (host: ::)`);
   });
 }
 

@@ -60,6 +60,10 @@ app.use("/api", apiCorsMiddleware);
 
 app.use(express.json({ limit: "10mb" }));
 
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 app.use("/api/ai/offert", aiOffertRouter);
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;

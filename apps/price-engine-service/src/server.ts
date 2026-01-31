@@ -403,11 +403,45 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: "Internal server error" });
 });
 
+const runSelfTest = (port: number) => {
+  setTimeout(async () => {
+    const addresses = [`http://127.0.0.1:${port}/api/health`, `http://[::1]:${port}/api/health`];
+
+    try {
+      // Find Fly IPv6 (fdaa...)
+      const ifaces = os.networkInterfaces();
+      for (const name in ifaces) {
+        ifaces[name]?.forEach(iface => {
+          if (iface.family === 'IPv6' && !iface.internal && iface.address.startsWith('fdaa')) {
+            addresses.push(`http://[${iface.address}]:${port}/api/health`);
+          }
+        });
+      }
+    } catch (e) { console.error('Error listing interfaces', e); }
+
+    console.log(`[Self-Test] Checking connectivity on ${addresses.length} endpoints...`);
+
+    for (const url of addresses) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          console.log(`[Self-Test] ✅ ${url} responded ${res.status}`);
+        } else {
+          console.log(`[Self-Test] ❌ ${url} responded ${res.status}`);
+        }
+      } catch (e: any) {
+        console.log(`[Self-Test] ❌ ${url} failed: ${e.message}`);
+      }
+    }
+  }, 2000);
+};
+
 if (process.env.NODE_ENV !== "test") {
   const port = Number(process.env.PORT || 3000);
-  // Listen on IPv6 "::" to allow both IPv4 and IPv6 connections (Fly.io uses IPv6 internal networking)
-  app.listen(port, "::", () => {
-    console.log(`Price engine service ready on port ${port} (host: ::)`);
+  // Bind without host to allow Node to listen on all interfaces (IPv4/IPv6)
+  app.listen(port, () => {
+    console.log(`Price engine service ready on port ${port} (host: all interfaces)`);
+    runSelfTest(port);
   });
 }
 

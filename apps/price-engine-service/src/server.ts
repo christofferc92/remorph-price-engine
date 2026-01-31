@@ -10,6 +10,7 @@ import { z } from "zod";
 
 import { canonicalEstimatorContractSchema } from "../../../src/shared/canonicalEstimatorContractSchema.ts";
 import { evaluateContract } from "../../../packages/price-engine/src/index.ts";
+import { aiOffertRouter } from "../../../src/routes/aiOffertRoutes.ts";
 
 export const app = express();
 const fsPromises = fs.promises;
@@ -58,6 +59,8 @@ function apiCorsMiddleware(req: express.Request, res: express.Response, next: ex
 app.use("/api", apiCorsMiddleware);
 
 app.use(express.json({ limit: "10mb" }));
+
+app.use("/api/ai/offert", aiOffertRouter);
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);

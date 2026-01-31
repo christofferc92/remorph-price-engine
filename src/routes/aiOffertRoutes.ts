@@ -4,6 +4,7 @@ import { analyzeBathroomImage } from '../ai-price-engine/services/gemini';
 import { generateOffertunderlag } from '../ai-price-engine/services/offert-generator';
 import { AnalysisResponse, OffertResponse } from '../ai-price-engine/types';
 import { generateAfterImage } from '../ai-image-engine';
+import { uploadPngAndSign } from '../lib/supabaseStorage';
 
 const router = Router();
 
@@ -171,13 +172,26 @@ router.post(
                 customPrompt,
             });
 
+            // Upload to Supabase and get signed URL
+            const { path: storagePath, signedUrl } = await uploadPngAndSign({
+                bytes: result.image_buffer,
+                mimeType: result.mime_type,
+            });
+
             const latencyMs = Date.now() - startTime;
 
+            // Check debug mode
+            const isDebug = req.query.debug === '1' || process.env.RETURN_BASE64 === '1';
+
             res.json({
-                ...result,
+                after_image_url: signedUrl,
+                after_image_path: storagePath,
+                mime_type: result.mime_type,
                 provider: process.env.AFTER_IMAGE_PROVIDER || 'gemini',
                 model: process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',
                 latency_ms: latencyMs,
+                // Only include base64 in debug mode
+                after_image_base64: isDebug ? result.after_image_base64 : undefined,
             });
         } catch (error: any) {
             console.error('[AI-Offert] After-image error:', error);

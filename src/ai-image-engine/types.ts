@@ -15,7 +15,8 @@ export interface AfterImageRequest {
  * Response containing the generated after-image
  */
 export interface AfterImageResponse {
-    after_image_base64: string;
+    after_image_base64?: string;
+    image_buffer: Buffer;
     mime_type: string; // 'image/png' or 'image/jpeg'
 }
 

@@ -87,6 +87,11 @@ fly deploy --app remorph-price-engine-cccc
 | `OPENAI_IMAGE_MODEL` | OpenAI model name | No (defaults to `gpt-4o-mini`) |
 | `GOOGLE_API_KEY` | For `/api/ai/offert/*` Gemini-based AI price engine | Only for `/api/ai/offert/*` |
 | `NODE_ENV` | Runtime environment | No (set to `production` in start script) |
+| `SUPABASE_URL` | Supabase project URL | Yes (for `/after-image`) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Private service role key for uploads | Yes (for `/after-image`) |
+| `SUPABASE_BUCKET` | Image bucket name | No (default `ai-offert-images`) |
+| `SUPABASE_SIGNED_URL_TTL_SECONDS` | Signed URL expiration | No (default `3600`) |
+| `RETURN_BASE64` | If "1", include base64 in response (for debug) | No |
 
 ### Local Development
 
@@ -633,6 +638,38 @@ curl -X POST http://localhost:3000/api/ai/offert/analyze \
 - Conservative pricing (realistic for Swedish certified contractors)
 - All text in Swedish
 - Pricing reflects 2026 Swedish market rates
+
+### POST /api/ai/offert/after-image (v1)
+
+**Purpose**: Generate a photorealistic after-renovation visualization using AI.
+
+#### Request Schema
+
+**Content-Type**: `multipart/form-data`
+
+**Fields**:
+- `image` (File, required): The "before" image (JPEG/PNG).
+- `step1` (String, required): JSON string of Step 1 analysis response.
+- `answers` (String, required): JSON string of Step 2 user answers.
+- `step2` (String, optional): JSON string of Step 2 offert response.
+- `description` (String, optional): Additional prompt text.
+
+#### Response Schema
+
+**Success (200)**:
+```json
+{
+  "after_image_url": "https://<supabase-domain>/storage/v1/object/sign/...",
+  "after_image_path": "ai-offert/after-images/YYYY-MM-DD/<uuid>.png",
+  "mime_type": "image/png",
+  "provider": "gemini",
+  "model": "gemini-2.5-flash-image",
+  "latency_ms": 1234,
+  "after_image_base64": "..." // Only if debug=1
+}
+```
+
+**Note**: The signed URL typically expires in 1 hour (configurable via `SUPABASE_SIGNED_URL_TTL_SECONDS`). Uses private Supabase bucket.
 
 ---
 

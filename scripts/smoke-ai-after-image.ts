@@ -124,27 +124,36 @@ async function runAfterImageSmokeTest() {
         const result = await res.json();
 
         // Assertions
-        if (!result.after_image_base64) {
-            throw new Error('Response missing after_image_base64 field');
+        if (!result.after_image_url) {
+            throw new Error('Response missing after_image_url field');
         }
 
         if (!result.mime_type) {
             throw new Error('Response missing mime_type field');
         }
 
-        if (result.after_image_base64.length < 10000) {
-            throw new Error(`Base64 length too short: ${result.after_image_base64.length} (expected > 10000)`);
+        if (result.after_image_base64) {
+            console.log('ℹ️ Base64 present (debug mode or env var set)');
+        } else {
+            console.log('✅ Base64 omitted (standard mode)');
         }
 
         console.log('✅ After-image generation successful!');
-        console.log(`MIME Type: ${result.mime_type}`);
-        console.log(`Base64 Length: ${result.after_image_base64.length} characters`);
+        console.log(`URL: ${result.after_image_url.substring(0, 50)}...`);
+        console.log(`Path: ${result.after_image_path}`);
         console.log(`Provider: ${result.provider || 'unknown'}`);
         console.log(`Model: ${result.model || 'unknown'}`);
         console.log(`Latency: ${result.latency_ms || 'unknown'} ms`);
 
-        // Decode base64 and save to file
-        const imageData = Buffer.from(result.after_image_base64, 'base64');
+        // Download image from URL and save to file
+        console.log(`\n⬇️ Downloading image from Supabase...`);
+        const imgRes = await fetch(result.after_image_url);
+        if (!imgRes.ok) {
+            throw new Error(`Failed to download image: ${imgRes.status} ${imgRes.statusText}`);
+        }
+
+        const arrayBuffer = await imgRes.arrayBuffer();
+        const imageData = Buffer.from(arrayBuffer);
         const extension = result.mime_type === 'image/png' ? 'png' : 'jpg';
         const outputPath = path.join(OUTPUT_DIR, `after_${scenario}.${extension}`);
 

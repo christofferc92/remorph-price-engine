@@ -84,8 +84,10 @@ export class GeminiAfterImageProvider implements AfterImageProvider {
                 if ('inlineData' in part && part.inlineData) {
                     const imageData = part.inlineData.data;
                     const mimeType = part.inlineData.mimeType || 'image/png';
+                    const buffer = Buffer.from(imageData, 'base64');
 
                     return {
+                        image_buffer: buffer,
                         after_image_base64: imageData,
                         mime_type: mimeType,
                     };

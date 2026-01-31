@@ -68,23 +68,20 @@ curl -X POST "$FLY_BASE/after-image" \
         const data = JSON.parse(Buffer.concat(chunks).toString());
         
         console.log('✅ Response received');
+        console.log('URL:', data.after_image_url || 'missing');
         console.log('MIME Type:', data.mime_type || 'missing');
-        console.log('Base64 Length:', data.after_image_base64?.length || 0);
+        console.log('Base64 Length:', data.after_image_base64?.length || 'omitted');
         console.log('Provider:', data.provider || 'unknown');
         console.log('Model:', data.model || 'unknown');
         console.log('Latency:', data.latency_ms || 'unknown', 'ms');
         
         // Assertions
-        if (!data.after_image_base64) {
-          console.error('❌ Missing after_image_base64');
+        if (!data.after_image_url) {
+          console.error('❌ Missing after_image_url');
           process.exit(1);
         }
         if (!data.mime_type) {
           console.error('❌ Missing mime_type');
-          process.exit(1);
-        }
-        if (data.after_image_base64.length < 10000) {
-          console.error('❌ Base64 too short:', data.after_image_base64.length);
           process.exit(1);
         }
         

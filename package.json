@@ -20,6 +20,7 @@
     "price-engine:start": "TSX_DISABLE_DAEMON=1 NODE_ENV=production tsx apps/price-engine-service/src/server.ts",
     "price-engine:equivalence-test": "TSX_DISABLE_DAEMON=1 tsx scripts/equivalence-test.ts",
     "smoke-ai-offert": "TSX_DISABLE_DAEMON=1 tsx scripts/smoke-ai-offert.ts",
+    "smoke-ai-after-image": "TSX_DISABLE_DAEMON=1 tsx scripts/smoke-ai-after-image.ts",
     "generate:price-copy-catalog": "TSX_DISABLE_DAEMON=1 tsx scripts/generate-price-copy-catalog.ts"
   },
   "dependencies": {

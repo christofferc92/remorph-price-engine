@@ -398,322 +398,141 @@ All routes use the same CORS middleware (see section G).
 
 ---
 
-### POST /api/ai/offert/analyze
+## C) AI Price Engine & Offert API
 
-**Purpose**: Gemini-based AI analysis of bathroom images to generate follow-up questions (Step 1 of AI price engine).
+> **System Context**: These endpoints run within the `remorph-price-engine` service on Fly.io, handling the new AI-based estimation flow.
 
-> **Note**: This is part of the **NEW AI Price Engine** (bathroom-only for now), separate from the deterministic price engine. Uses Google Gemini instead of OpenAI.
+### 1. Service Overview
 
-#### Request Schema
+- **Entry Point**: [apps/price-engine-service/src/server.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/apps/price-engine-service/src/server.ts) mounts routes at `/api/ai/offert`.
+- **Router**: [src/routes/aiOffertRoutes.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/routes/aiOffertRoutes.ts)
+- **Primary Dependencies**: 
+  - `GoogleGenerativeAI` (Gemini 2.5)
+  - `@supabase/supabase-js` (Storage)
 
-**Content-Type**: `multipart/form-data` (10 MB file limit)
+### 2. AI Offert Routes & Contracts
 
-**Fields**:
-- `image` (required): JPEG or PNG image file
-- `description` (optional): User's text description of renovation intent
+#### POST /api/ai/offert/analyze
 
-#### Example Request (curl)
+**Purpose**: Analyze "before" image to generate renovate-able observations and follow-up questions.
 
-```bash
-curl -X POST http://localhost:3000/api/ai/offert/analyze \
-  -F "image=@bathroom.jpg" \
-  -F "description=renovera badrum"
-```
+**Request (multipart/form-data)**:
+- `image`: File (required, JPEG/PNG)
+- `description`: String (optional)
 
-#### Response Schema
-
-**Success (200)**:
+**Response (JSON)**:
 ```json
 {
   "inferred_project_type": "bathroom",
   "image_observations": {
-    "summary_sv": "Ett badrum med klinker på golv och väggar...",
-    "inferred_size_sqm": {
-      "value": 5.5,
-      "confidence": "medium",
-      "basis_sv": "Baserat på synliga armaturer och proportioner"
-    },
-    "visible_elements": ["dusch", "toalett", "handfat"],
-    "uncertainties": ["tätskikt ålder", "underlag typ"]
+    "summary_sv": "Ett badrum med...",
+    "uncertainties": ["tätskikt ålder"]
   },
-  "scope_guess": {
-    "value": "floor_only",
-    "confidence": "medium",
-    "basis_sv": "Användaren nämnde golvbyte"
-  },
+  "scope_guess": { "value": "floor_only" },
   "follow_up_questions": [
-    {
-      "id": "q1",
-      "priority": 1,
-      "question_sv": "Vad är befintligt golvmaterial?",
+    { 
+      "id": "q1", 
+      "question_sv": "...", 
       "type": "single_choice",
-      "options": ["Klinker", "Plastmatta", "Trägolv", "Vet ej"],
-      "maps_to": "demolition_existing_floor",
-      "why_it_matters_sv": "Påverkar rivningskostnad och tid",
-      "ask_mode": "confirm",
-      "prefill_guess": "Klinker",
-      "prefill_confidence": "high",
-      "prefill_basis_sv": "Synligt i bilden"
+      "options": ["Option A", "Option B"], 
+      "prefill_guess": "Option A" 
     }
-    // ... 9 more questions (exactly 10 total)
   ]
 }
 ```
 
-**Error (400)**: Missing or invalid image
+#### POST /api/ai/offert/generate
+
+**Purpose**: Generate text-based "offertunderlag" (quote basis) from Step 1 analysis + User Answers.
+
+**Request (JSON)**:
 ```json
 {
-  "error": "Image file is required (jpeg/png)"
+  "step1": { ... }, // Full Step 1 response
+  "answers": { "q1": "Option A" } // User answers keyed by Question ID
 }
 ```
 
-**Error (502)**: AI service error
+**Response (JSON)**:
 ```json
 {
-  "error": "AI Service Error",
-  "details": "Failed to parse AI response as JSON"
+  "scope_summary_sv": "...",
+  "confirmed_inputs": { "floor_area_sqm": 5.5, ... },
+  "price_range_sek": { "low": 25000, "high": 35000 },
+  "cost_breakdown_estimate": { ... }
 }
 ```
 
-**Error (500)**: Internal server error
-```json
-{
-  "error": "Internal Server Error",
-  "details": "Error message"
-}
-```
-
-#### Implementation Details
-
-**Router**: [src/routes/aiOffertRoutes.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/routes/aiOffertRoutes.ts)
-
-**Service**: [src/ai-price-engine/services/gemini.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/ai-price-engine/services/gemini.ts)
-
-**Prompt**: [src/ai-price-engine/prompts/bathroom/step1.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/ai-price-engine/prompts/bathroom/step1.ts)
-
-**Key Behaviors**:
-- Uses Gemini 2.5 Flash model
-- Image stored in memory only (no filesystem dependency)
-- Returns exactly 10 follow-up questions
-- Questions ordered by pricing impact (priority)
-- Prefills answers when inferable from image (ask_mode="confirm")
-- All text in Swedish
-
----
-
-### POST /api/ai/offert/generate
-
-**Purpose**: Generate Swedish "offertunderlag" (quote basis) from Step 1 analysis and user answers (Step 2 of AI price engine).
-
-#### Request Schema
-
-**Content-Type**: `application/json`
-
-**Body**:
-```typescript
-{
-  step1: AnalysisResponse,  // Full response from /analyze
-  answers: Record<string, any>  // Keyed by question.id
-}
-```
-
-#### Example Request
-
-```json
-{
-  "step1": {
-    "inferred_project_type": "bathroom",
-    "image_observations": { /* ... */ },
-    "scope_guess": { /* ... */ },
-    "follow_up_questions": [ /* ... */ ]
-  },
-  "answers": {
-    "q1": "Klinker",
-    "q2": "5.5",
-    "q3": "Ja",
-    "q4": "Nej"
-    // ... answers for all 10 questions
-  }
-}
-```
-
-#### Response Schema
-
-**Success (200)**:
-```json
-{
-  "project_type": "bathroom",
-  "scope_summary_sv": "Golvbyte i badrum, ca 5.5 m²",
-  "assumptions_sv": [
-    "Befintligt underlag är i gott skick",
-    "Tätskikt behöver förnyas"
-  ],
-  "confirmed_inputs": {
-    "floor_area_sqm": 5.5,
-    "scope_level": "floor_only",
-    "waterproofing": "yes",
-    "underfloor_heating": "no",
-    "floor_drain": "yes",
-    "demolition": "klinker",
-    "tile_price_tier": "standard",
-    "tile_size_category": "medium",
-    "fixture_changes": "none",
-    "access_conditions": "normal",
-    "location_municipality": "Stockholm"
-  },
-  "price_range_sek": {
-    "low": 25000,
-    "high": 35000,
-    "confidence": "medium"
-  },
-  "cost_breakdown_estimate": {
-    "labor_sek": {
-      "low": 15000,
-      "high": 20000,
-      "notes_sv": "Rivning, tätskikt, läggning"
-    },
-    "materials_sek": {
-      "low": 8000,
-      "high": 12000,
-      "notes_sv": "Klinker, tätskikt, fogmassa"
-    },
-    "additional_costs_sek": {
-      "low": 2000,
-      "high": 3000,
-      "items": ["Avfall", "Besiktning"]
-    }
-  },
-  "major_cost_drivers_sv": [
-    "Golvarea (5.5 m²)",
-    "Tätskikt krävs"
-  ],
-  "risk_and_uncertainty_factors_sv": [
-    "Underlagets skick okänt",
-    "Eventuell lutningskorrigering"
-  ],
-  "what_can_change_price_sv": [
-    "Val av klinker (standard vs premium)",
-    "Behov av golvbrunn byte"
-  ],
-  "contractor_summary_sv": "Golvbyte i badrum ca 5.5 m². Inkluderar rivning av befintligt klinker, nytt tätskikt, och läggning av nya klinkerplattor. Pris 25,000-35,000 SEK beroende på materialval och underlagets skick."
-}
-```
-
-**Error (400)**: Missing required fields
-```json
-{
-  "error": "Missing required fields: step1, answers"
-}
-```
-
-**Error (502)**: AI service error
-```json
-{
-  "error": "AI Service Error",
-  "details": "Failed to parse AI response as JSON"
-}
-```
-
-**Error (500)**: Internal server error
-```json
-{
-  "error": "Internal Server Error",
-  "details": "Error message"
-}
-```
-
-#### Implementation Details
-
-**Router**: [src/routes/aiOffertRoutes.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/routes/aiOffertRoutes.ts)
-
-**Service**: [src/ai-price-engine/services/offert-generator.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/ai-price-engine/services/offert-generator.ts)
-
-**Prompt**: [src/ai-price-engine/prompts/bathroom/step2.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/ai-price-engine/prompts/bathroom/step2.ts)
-
-**Key Behaviors**:
-- Uses Gemini 2.5 Flash model
-- Normalizes answers using `maps_to` keys from questions
-- Uses prefill_guess as default if user doesn't answer
-- Marks unanswered questions as "unknown"
-- Conservative pricing (realistic for Swedish certified contractors)
-- All text in Swedish
-- Pricing reflects 2026 Swedish market rates
-
-### POST /api/ai/offert/after-image (v1)
+#### POST /api/ai/offert/after-image (v1)
 
 **Purpose**: Generate a photorealistic after-renovation visualization using AI.
 
-#### Request Schema
+**Request (multipart/form-data)**:
+- `image`: File (required, "before" image)
+- `step1`: JSON String (required, analysis data)
+- `answers`: JSON String (required, user answers)
+- `step2`: JSON String (optional, generate response)
+- `description`: String (optional, extra prompt)
 
-**Content-Type**: `multipart/form-data`
-
-**Fields**:
-- `image` (File, required): The "before" image (JPEG/PNG).
-- `step1` (String, required): JSON string of Step 1 analysis response.
-- `answers` (String, required): JSON string of Step 2 user answers.
-- `step2` (String, optional): JSON string of Step 2 offert response.
-- `description` (String, optional): Additional prompt text.
-
-#### Response Schema
-
-**Success (200)**:
+**Response (JSON)**:
 ```json
 {
-  "after_image_url": "https://<supabase-domain>/storage/v1/object/sign/...",
-  "after_image_path": "ai-offert/after-images/YYYY-MM-DD/<uuid>.png",
+  "after_image_url": "https://xyz.supabase.co/storage/v1/object/sign/ai-offert/after-images/2026-01-31/uuid.png?token=...",
+  "after_image_path": "ai-offert/after-images/2026-01-31/uuid.png",
   "mime_type": "image/png",
   "provider": "gemini",
   "model": "gemini-2.5-flash-image",
   "latency_ms": 1234,
-  "after_image_base64": "..." // Only if debug=1
+  "after_image_base64": "..." // Omitted by default. Present if debug=1
 }
 ```
 
-**Note**: The signed URL typically expires in 1 hour (configurable via `SUPABASE_SIGNED_URL_TTL_SECONDS`). Uses private Supabase bucket.
+**Debug Mode**:
+- Add `?debug=1` query parameter OR set `RETURN_BASE64=1` env var.
+- **Effect**: Populates `after_image_base64`. Used for local debugging only, not recommended for production due to OOM risks.
 
----
+### 3. Gemini After-Image Provider
 
-### AI Price Engine Architecture
+- **Implementation**: [src/ai-image-engine/providers/gemini.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/ai-image-engine/providers/gemini.ts)
+- **Model**: `gemini-2.5-flash-image` (default)
+- **Output**: Generates `Buffer` from base64 parts provided by Gemini SDK.
+- **Failure Handling**:
+  - Checks for empty parts or text refusals.
+  - Throws `Gemini image generation failed` on known errors.
 
-**Module Location**: [src/ai-price-engine/](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/ai-price-engine/)
+### 4. Supabase Storage Integration
 
-**Structure**:
-```
-src/ai-price-engine/
-├── prompts/
-│   └── bathroom/       # Bathroom-specific prompts
-│       ├── step1.ts    # Image → Questions
-│       └── step2.ts    # Answers → Offertunderlag
-├── services/
-│   ├── gemini.ts            # Gemini API client
-│   └── offert-generator.ts  # Offert generation logic
-├── types.ts            # Shared TypeScript types
-├── index.ts            # Public API exports
-└── README.md           # Module documentation
-```
+- **Implementation**: [src/lib/supabaseStorage.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/lib/supabaseStorage.ts)
+- **Bucket**: `ai-offert-images`
+- **Object Path**: `ai-offert/after-images/<YYYY-MM-DD>/<UUID>.png`
+- **Signed URL**: Uses `createSignedUrl` with 1 hour TTL (default).
 
-**Key Differences from Deterministic Engine**:
+### 5. Credentials & Security
 
-| Aspect | Deterministic Engine | AI Price Engine |
-|--------|---------------------|------------------|
-| **Scope** | Full bathroom renovations | Bathroom-only (for now) |
-| **Input** | Structured selections | Image + natural language |
-| **Pricing** | Catalog-based line items | AI-estimated ranges |
-| **Output** | Detailed task breakdown | Quote basis (offertunderlag) |
-| **AI Model** | OpenAI (for `/api/analyze` only) | Google Gemini |
-| **Language** | Mixed EN/SV | Swedish only |
-| **Status** | Production | Preparation (not wired to live frontend) |
+**Required Environment Variables**:
+| Variable | Purpose | Critical Note |
+|----------|---------|---------------|
+| `SUPABASE_URL` | API Endpoint | `https://<project-id>.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-Side Auth | **MUST be the 'service_role' secret**. NOT 'anon'. |
 
-**Future Expansion**:
-- Kitchen renovations (`prompts/kitchen/`)
-- Painting projects (`prompts/painting/`)
-- Other room types
+**Common Gotchas**:
+- **Wrong Key**: Using `anon` public key will cause upload failures (403/Forbidden) due to RLS policies usually requiring authentication for writing.
+- **Newline Chars**: Copy-pasting keys often adds `\n`. Ensure strings are trimmed.
 
-**Testing**:
-```bash
-# Smoke test (requires running server + test image)
-npm run smoke-ai-offert path/to/bathroom.jpg
-```
+### 6. Error Handling & Observability
+
+- **Supabase Upload Failure**:
+  - Logs: `[AI-Offert] After-image error: Supabase upload failed: <message>`
+  - Response: `500 Internal Server Error`
+- **Gemini Failure**:
+  - Logs: `[Gemini After-Image] Generation error: ...`
+  - Response: `502 Bad Gateway` (if upstream fails) or `500`.
+
+### 7. Memory Safety & OOM Risk
+
+- **Base64 String**: NOT kept in memory for the response JSON by default.
+- **Buffer**: Image bytes exist as a Buffer during the upload phase but are garbage collected after the request handles the stream.
+- **Risk**: Returning base64 `?debug=1` increases heap usage by ~33% of image size. Avoid in high-concurrency production.
 
 ---
 

@@ -8,6 +8,7 @@ export interface AfterImageRequest {
     description?: string;
     step1Data?: AnalysisResponse;
     step2Data?: OffertResponse;
+    customPrompt?: string; // If provided, use this instead of building from step1/step2
 }
 
 /**

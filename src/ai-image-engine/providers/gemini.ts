@@ -53,7 +53,8 @@ export class GeminiAfterImageProvider implements AfterImageProvider {
         const genAI = getGenAIClient();
         const model = genAI.getGenerativeModel({ model: this.modelName });
 
-        const prompt = buildPrompt(request);
+        // Use custom prompt if provided, otherwise build from request data
+        const prompt = request.customPrompt || buildPrompt(request);
         const base64Image = request.beforeImage.toString('base64');
 
         try {

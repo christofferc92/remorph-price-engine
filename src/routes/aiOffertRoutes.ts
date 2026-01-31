@@ -81,14 +81,16 @@ router.post('/generate', async (req, res) => {
 });
 
 
+
 /**
- * POST /api/ai/offert/after-image
+ * POST /api/ai/offert/after-image (v1 contract)
  * Accepts multipart/form-data with:
  *   - image OR before_image (required): JPEG/PNG file
+ *   - step1 (required): JSON string of Step 1 analysis
+ *   - answers (required): JSON string of user answers
  *   - description (optional): Text description
- *   - step1 (optional): JSON string of Step 1 analysis data
  *   - step2 (optional): JSON string of Step 2 offert data
- * Returns { after_image_base64, mime_type }
+ * Returns { after_image_base64, mime_type, provider, model, latency_ms }
  */
 router.post(
     '/after-image',
@@ -103,40 +105,70 @@ router.post(
             const file = files?.image?.[0] ?? files?.before_image?.[0];
 
             if (!file) {
-                return res.status(400).json({ error: 'No image file provided (use field name "image" or "before_image")' });
+                return res.status(400).json({ error: 'No image file provided' });
+            }
+
+            // Validate required fields
+            if (!req.body.step1 || !req.body.answers) {
+                return res.status(400).json({
+                    error: 'Missing required fields',
+                    details: 'step1 and answers are required',
+                });
             }
 
             const beforeImage = file.buffer;
             const description = req.body.description || undefined;
 
-            // Parse optional JSON fields
-            let step1Data: AnalysisResponse | undefined;
-            let step2Data: OffertResponse | undefined;
+            // Parse required JSON fields
+            let step1Data: AnalysisResponse;
+            let answers: Record<string, string | number>;
 
-            if (req.body.step1) {
-                try {
-                    step1Data = JSON.parse(req.body.step1);
-                } catch (e) {
-                    return res.status(400).json({ error: 'Invalid JSON in step1 field' });
-                }
+            try {
+                step1Data = JSON.parse(req.body.step1);
+            } catch (e: any) {
+                return res.status(400).json({
+                    error: 'Invalid JSON',
+                    details: `Failed to parse step1: ${e.message}`,
+                });
             }
 
+            try {
+                answers = JSON.parse(req.body.answers);
+            } catch (e: any) {
+                return res.status(400).json({
+                    error: 'Invalid JSON',
+                    details: `Failed to parse answers: ${e.message}`,
+                });
+            }
+
+            // Parse optional step2
+            let step2Data: OffertResponse | undefined;
             if (req.body.step2) {
                 try {
                     step2Data = JSON.parse(req.body.step2);
-                } catch (e) {
-                    return res.status(400).json({ error: 'Invalid JSON in step2 field' });
+                } catch (e: any) {
+                    return res.status(400).json({
+                        error: 'Invalid JSON',
+                        details: `Failed to parse step2: ${e.message}`,
+                    });
                 }
             }
 
             const startTime = Date.now();
 
-            // Generate after-image
+            // Build scope-safe prompt from step1 + answers
+            const { buildBathroomAfterImagePrompt } = await import('../ai-image-engine/prompts/bathroomAfterImagePrompt');
+            const customPrompt = buildBathroomAfterImagePrompt({
+                description,
+                step1: step1Data,
+                answers,
+                step2: step2Data,
+            });
+
+            // Generate after-image with custom prompt
             const result = await generateAfterImage({
                 beforeImage,
-                description,
-                step1Data,
-                step2Data,
+                customPrompt,
             });
 
             const latencyMs = Date.now() - startTime;
@@ -167,6 +199,7 @@ router.post(
         }
     }
 );
+
 
 
 export const aiOffertRouter = router;

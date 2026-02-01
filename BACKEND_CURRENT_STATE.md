@@ -400,141 +400,75 @@ All routes use the same CORS middleware (see section G).
 
 ---
 
-## C) AI Price Engine & Offert API
+## C) AI Price Engine (V2 - Active)
 
-> **System Context**: These endpoints run within the `remorph-price-engine` service on Fly.io, handling the new AI-based estimation flow.
+> **System Context**: These endpoints provide the new "Smart Estimate" flow, powered by Gemini 2.5 and a deterministic pricing hardener.
 
 ### 1. Service Overview
 
-- **Entry Point**: [apps/price-engine-service/src/server.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/apps/price-engine-service/src/server.ts) mounts routes at `/api/ai/offert`.
 - **Router**: [src/routes/aiOffertRoutes.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/routes/aiOffertRoutes.ts)
-- **Primary Dependencies**: 
-  - `GoogleGenerativeAI` (Gemini 2.5)
-  - `@supabase/supabase-js` (Storage)
+- **Prompt Logic**: [src/ai-price-engine/prompts/bathroom/step2_v2.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/ai-price-engine/prompts/bathroom/step2_v2.ts)
+- **Pricing Logic (Deterministic)**: [src/lib/pricing.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/lib/pricing.ts)
+- **Persistence**: [src/lib/store.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/lib/store.ts) (Micro-DB in `data/estimates/`)
 
-### 2. AI Offert Routes & Contracts
+### 2. Endpoints
 
-#### POST /api/ai/offert/analyze
+#### POST /api/ai/offert/analyze (Step 1)
+**Purpose**: Analyze "before" image to generate scope hypothesis and questions.
+- **Input**: `multipart/form-data` (image).
+- **Output**: `AnalysisResponse` (Room type, surfaces, questions).
 
-**Purpose**: Analyze "before" image to generate renovate-able observations and follow-up questions.
+#### POST /api/ai/offert/generate (Step 2 - V2)
+**Purpose**: Generate granular, contractor-grade estimate (V2).
+- **Input**: `{ step1: AnalysisResponse, answers: Record<string,any> }`
+- **Output**: `EstimateResponseV2`
+- **Process**:
+  1. Calls Gemini with `step2_v2.ts` Prompt -> Returns granular line items (JSON).
+  2. Passes items to `pricing.ts` -> Calculates Totals, VAT, RSS Spread, ROT.
+  3. Saves full estimate to **Store** (`data/estimates/{id}.json`).
+  4. Returns signed JSON (with `estimate_version: 2`).
 
-**Request (multipart/form-data)**:
-- `image`: File (required, JPEG/PNG)
-- `description`: String (optional)
+#### POST /api/ai/offert/reprice (V2)
+**Purpose**: Recalculate estimate based on user edits (quantity/price overrides).
+- **Input**: `RepriceRequestV2`
+  ```json
+  {
+    "estimate_id": "...",
+    "rot_input": { "apply_rot": true, "owners_count": 2, "rot_used_sek": 0 },
+    "edits": [{ "line_item_id": "...", "qty": 10, "manual_override": true }]
+  }
+  ```
+- **Output**: Updated `EstimateResponseV2`.
+- **Process**:
+  1. Loads estimate from Store.
+  2. Merges edits (soft lock).
+  3. Recalculates Totals/VAT/ROT/RSS.
+  4. Updates modified timestamp.
+  5. Saves and returns.
 
-**Response (JSON)**:
-```json
-{
-  "inferred_project_type": "bathroom",
-  "image_observations": {
-    "summary_sv": "Ett badrum med...",
-    "uncertainties": ["tätskikt ålder"]
-  },
-  "scope_guess": { "value": "floor_only" },
-  "follow_up_questions": [
-    { 
-      "id": "q1", 
-      "question_sv": "...", 
-      "type": "single_choice",
-      "options": ["Option A", "Option B"], 
-      "prefill_guess": "Option A" 
-    }
-  ]
-}
-```
+#### POST /api/ai/offert/after-image
+**Purpose**: Generate visualization. See Section B for Supabase integration details.
 
-#### POST /api/ai/offert/generate
+### 3. Pricing Logic (Hardened)
 
-**Purpose**: Generate text-based "offertunderlag" (quote basis) from Step 1 analysis + User Answers.
+**File**: [src/lib/pricing.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/lib/pricing.ts)
 
-**Request (JSON)**:
-```json
-{
-  "step1": { ... }, // Full Step 1 response
-  "answers": { "q1": "Option A" } // User answers keyed by Question ID
-}
-```
+1. **Line Totals**: `qty * unit_price_incl_vat` (Deterministic).
+2. **ROT Deduction**:
+   - Filter items where `is_rot_eligible` is true.
+   - For `type: mixed`, apply `labor_share_percent`.
+   - Sum eligible labor Ex VAT (`Incl / 1.25`).
+   - Deduct 30%, capped at 50,000 SEK per owner.
+3. **Uncertainty (RSS)**:
+   - Aggregates individual item variances (`low`/`high`) using Root-Sum-Square method.
+   - `ProjectSpread = sqrt(sum(ItemSpread^2))`.
+   - Results in `summary.total_low` / `summary.total_high`.
 
-**Response (JSON)**:
-```json
-{
-  "scope_summary_sv": "...",
-  "confirmed_inputs": { "floor_area_sqm": 5.5, ... },
-  "price_range_sek": { "low": 25000, "high": 35000 },
-  "cost_breakdown_estimate": { ... }
-}
-```
+### 4. Persistence
 
-#### POST /api/ai/offert/after-image (v1)
-
-**Purpose**: Generate a photorealistic after-renovation visualization using AI.
-
-**Request (multipart/form-data)**:
-- `image`: File (required, "before" image)
-- `step1`: JSON String (required, analysis data)
-- `answers`: JSON String (required, user answers)
-- `step2`: JSON String (optional, generate response)
-- `description`: String (optional, extra prompt)
-
-**Response (JSON)**:
-```json
-{
-  "after_image_url": "https://xyz.supabase.co/storage/v1/object/sign/ai-offert/after-images/2026-01-31/uuid.png?token=...",
-  "after_image_path": "ai-offert/after-images/2026-01-31/uuid.png",
-  "mime_type": "image/png",
-  "provider": "gemini",
-  "model": "gemini-2.5-flash-image",
-  "latency_ms": 1234,
-  "after_image_base64": "..." // Omitted by default. Present if debug=1
-}
-```
-
-**Debug Mode**:
-- Add `?debug=1` query parameter OR set `RETURN_BASE64=1` env var.
-- **Effect**: Populates `after_image_base64`. Used for local debugging only, not recommended for production due to OOM risks.
-
-### 3. Gemini After-Image Provider
-
-- **Implementation**: [src/ai-image-engine/providers/gemini.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/ai-image-engine/providers/gemini.ts)
-- **Model**: `gemini-2.5-flash-image` (default)
-- **Output**: Generates `Buffer` from base64 parts provided by Gemini SDK.
-- **Failure Handling**:
-  - Checks for empty parts or text refusals.
-  - Throws `Gemini image generation failed` on known errors.
-
-### 4. Supabase Storage Integration
-
-- **Implementation**: [src/lib/supabaseStorage.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/lib/supabaseStorage.ts)
-- **Bucket**: `ai-offert-images`
-- **Object Path**: `ai-offert/after-images/<YYYY-MM-DD>/<UUID>.png`
-- **Signed URL**: Uses `createSignedUrl` with 1 hour TTL (default).
-
-### 5. Credentials & Security
-
-**Required Environment Variables**:
-| Variable | Purpose | Critical Note |
-|----------|---------|---------------|
-| `SUPABASE_URL` | API Endpoint | `https://<project-id>.supabase.co` |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-Side Auth | **MUST be the 'service_role' secret**. NOT 'anon'. |
-
-**Common Gotchas**:
-- **Wrong Key**: Using `anon` public key will cause upload failures (403/Forbidden) due to RLS policies usually requiring authentication for writing.
-- **Newline Chars**: Copy-pasting keys often adds `\n`. Ensure strings are trimmed.
-
-### 6. Error Handling & Observability
-
-- **Supabase Upload Failure**:
-  - Logs: `[AI-Offert] After-image error: Supabase upload failed: <message>`
-  - Response: `500 Internal Server Error`
-- **Gemini Failure**:
-  - Logs: `[Gemini After-Image] Generation error: ...`
-  - Response: `502 Bad Gateway` (if upstream fails) or `500`.
-
-### 7. Memory Safety & OOM Risk
-
-- **Base64 String**: NOT kept in memory for the response JSON by default.
-- **Buffer**: Image bytes exist as a Buffer during the upload phase but are garbage collected after the request handles the stream.
-- **Risk**: Returning base64 `?debug=1` increases heap usage by ~33% of image size. Avoid in high-concurrency production.
+**File**: [src/lib/store.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/lib/store.ts)
+- Atomic file-based storage (`write .tmp` -> `rename`).
+- Path: `data/estimates/`.
 
 ---
 
@@ -1059,71 +993,38 @@ curl -X POST http://localhost:3000/api/estimate \
 ---
 
 ## Summary
-
 ### What Works Today
 
-✅ **POST /api/estimate** - Generates detailed renovation estimates with:
-- Line-item pricing (labor/material/subtotal)
-- ROT tax deduction calculations
-- Site condition allowances
-- Estimate ranges (low/mid/high)
-- Confidence tiers and warnings
+✅ **POST /api/estimate** (Legacy) - Deterministic estimator (Rule-based).
 
-✅ **POST /api/ai/offert/analyze** - Gemini-based image analysis (NEW):
-- Analyzes bathroom images
-- Generates 10 follow-up questions
-- Prefills answers from image analysis
-- Swedish language output
+✅ **POST /api/ai/offert/* (V2 - Active)**:
+   - **Analyze**: Image → Scope/Questions.
+   - **Generate**: Granular V2 estimate (Granular Line Items).
+   - **Reprice**: Edit quantities/prices → Recalculate Totals/ROT/Spread.
+   
+✅ **Pricing Engine Hardened**:
+   - `pricing.ts`: Deterministic logic for VAT, ROT (Labor/Mixed), and RSS Uncertainty.
+   - `store.ts`: Atomic file-based persistence for `estimate_id` lookup.
 
-✅ **POST /api/ai/offert/generate** - AI-based quote generation (NEW):
-- Generates Swedish "offertunderlag"
-- Conservative pricing estimates
-- Cost breakdowns and risk factors
-- Bathroom-only for now
-
-✅ **Adapter Layer** - Converts AI analysis payloads to canonical schema
-
-✅ **CORS** - Allows Lovable, Google User Content, localhost
-
-✅ **Catalog System** - YAML-based task definitions, JSON generation
-
-✅ **Testing** - Basic regression tests for floor heating and site conditions
-
-### What Doesn't Work / Isn't Implemented
-
-❌ **Authentication** - All endpoints are public
-
-❌ **Rate Limiting** - Vulnerable to abuse
-
-❌ **Error Recovery** - No retry logic for OpenAI API failures
-
-❌ **Comprehensive Tests** - No unit tests, limited integration tests
-
-❌ **CORS Blocking** - Disallowed origins still process requests
-
-❌ **Catalog Validation** - No automated checks for catalog/rate card consistency
+✅ **Infrastructure**:
+   - CORS enabled for frontend apps.
+   - Supabase Edge Functions (Image Gen).
+   - Verification scripts (`verify-backend-v2.ts`).
 
 ### Critical Files Reference
 
 | File | Purpose |
 |------|---------|
-| [apps/price-engine-service/src/server.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/apps/price-engine-service/src/server.ts) | Express server, routes, adapter, CORS |
-| [src/routes/aiOffertRoutes.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/routes/aiOffertRoutes.ts) | AI price engine API routes |
-| [src/ai-price-engine/services/gemini.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/ai-price-engine/services/gemini.ts) | Gemini API client for image analysis |
-| [src/ai-price-engine/services/offert-generator.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/ai-price-engine/services/offert-generator.ts) | Offertunderlag generation service |
-| [src/ai-price-engine/prompts/bathroom/step1.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/ai-price-engine/prompts/bathroom/step1.ts) | Step 1 prompt (image → questions) |
-| [src/ai-price-engine/prompts/bathroom/step2.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/ai-price-engine/prompts/bathroom/step2.ts) | Step 2 prompt (answers → offert) |
-| [src/ai-price-engine/types.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/ai-price-engine/types.ts) | AI price engine TypeScript types |
-| [packages/price-engine/src/contract.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/packages/price-engine/src/contract.ts) | Frontend contract → estimator inputs |
-| [packages/price-engine/estimator/estimator.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/packages/price-engine/estimator/estimator.ts) | Quantity computation, task building |
-| [src/shared/canonicalEstimatorContractSchema.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/shared/canonicalEstimatorContractSchema.ts) | Zod schemas for validation |
-| [catalog/bathroom_catalog.yaml](file:///Users/christofferchristiansen/remorph-price-engine-clean/catalog/bathroom_catalog.yaml) | Task definitions, intents, flags |
-| [packages/price-engine/estimator/ratecard.placeholder.yaml](file:///Users/christofferchristiansen/remorph-price-engine-clean/packages/price-engine/estimator/ratecard.placeholder.yaml) | Pricing rates for all tasks |
-| [scripts/generate-price-engine-catalogs.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/scripts/generate-price-engine-catalogs.ts) | Catalog JSON generation |
-| [scripts/smoke-ai-offert.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/scripts/smoke-ai-offert.ts) | AI price engine smoke test |
+| [apps/price-engine-service/src/server.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/apps/price-engine-service/src/server.ts) | Express server, Legacy routes |
+| [src/routes/aiOffertRoutes.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/routes/aiOffertRoutes.ts) | AI/V2 API routes (Analyze, Generate, Reprice) |
+| [src/lib/pricing.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/lib/pricing.ts) | **V2 Pricing Logic** (Source of Truth) |
+| [src/lib/store.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/lib/store.ts) | **V2 Persistence** (Atomic Writes) |
+| [src/ai-price-engine/types.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/ai-price-engine/types.ts) | **V2 Schema** |
+| [src/ai-price-engine/prompts/bathroom/step2_v2.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/src/ai-price-engine/prompts/bathroom/step2_v2.ts) | V2 Prompt (Line Items) |
+| [scripts/verify-backend-v2.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/scripts/verify-backend-v2.ts) | Verification Suite |
 
 ---
 
-**Document Version**: 2026-01-31  
-**Backend Version**: Git SHA from `GET /api/health`  
-**Deployment**: Fly.io `remorph-price-engine-cccc`
+**Document Version**: 2026-02-01 (Backend Estimate V2 Upgrade)  
+**Backend Version**: Hardened V2 Logic  
+**Deployment**: Fly.io

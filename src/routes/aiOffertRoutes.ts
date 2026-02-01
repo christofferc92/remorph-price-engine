@@ -13,8 +13,16 @@ import {
     cacheIdempotency,
 } from '../lib/guardrails';
 import { estimateTextCostUsd } from '../lib/costDebug';
+import { generateOffertunderlagV2 } from '../ai-price-engine/services/offert-generator';
+import { calculateEstimate } from '../lib/pricing';
+import { saveEstimate, loadEstimate } from '../lib/store';
+import { RepriceRequestV2, SectionV2, LineItemV2 } from '../ai-price-engine/types';
+import { sendError, rateLimitMiddleware } from '../lib/api-harden';
 
 const router = Router();
+
+// Apply rate limiting to all routes in this router
+router.use(rateLimitMiddleware);
 
 // Configure Multer for memory storage, 10MB limit, images only
 const upload = multer({
@@ -35,9 +43,10 @@ const upload = multer({
  * Returns AnalysisResponse.
  */
 router.post('/analyze', upload.single('image'), async (req, res) => {
+    const requestId = res.locals.requestId;
     try {
         if (!req.file) {
-            return res.status(400).json({ error: 'Image file is required (jpeg/png)' });
+            return sendError(res, 400, 'Image file is required (jpeg/png)');
         }
 
         const imageBuffer = req.file.buffer;
@@ -58,17 +67,15 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
             })
         };
 
-        res.json({ ...analysis, debug_cost });
+        res.json({ ...analysis, debug_cost, request_id: requestId });
     } catch (error: any) {
-        console.error('[AI-Offert] Analyze error:', error);
+        console.error(`[AI-Offert] Analyze error [${requestId}]:`, error);
 
-        // Handle specific AI errors if possible, otherwise 500
-        // Using 502 for upstream AI failures/bad JSON
         if (error.message?.includes('Failed to parse AI response') || error.message?.includes('GoogleGenerativeAI')) {
-            return res.status(502).json({ error: 'AI Service Error', details: error.message });
+            return sendError(res, 502, 'AI Service Error', error.message);
         }
 
-        res.status(500).json({ error: 'Internal Server Error', details: error.message });
+        sendError(res, 500, 'Internal Server Error', error.message);
     }
 });
 
@@ -78,16 +85,20 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
  * Returns OffertResponse.
  */
 router.post('/generate', async (req, res) => {
+    const requestId = res.locals.requestId;
     try {
         const { step1, answers } = req.body;
 
         // Basic validation
         if (!step1 || !answers) {
-            return res.status(400).json({ error: 'Missing required fields: step1, answers' });
+            return sendError(res, 400, 'Missing required fields: step1, answers');
         }
 
-        // Call AI Price Engine Step 2
-        const { data: offert, usageMetadata } = await generateOffertunderlag(step1 as AnalysisResponse, answers);
+        // Call AI Price Engine Step 2 (V2)
+        const { data: estimate, usageMetadata } = await generateOffertunderlagV2(step1 as AnalysisResponse, answers);
+
+        // Save to FS Store (Mock persistence)
+        await saveEstimate(estimate);
 
         const debug_cost = {
             step: 'estimation',
@@ -101,15 +112,108 @@ router.post('/generate', async (req, res) => {
             })
         };
 
-        res.json({ ...offert, debug_cost });
+        // Return V2 estimate
+        res.json({ ...estimate, debug_cost, request_id: requestId });
     } catch (error: any) {
-        console.error('[AI-Offert] Generate error:', error);
+        console.error(`[AI-Offert] Generate error [${requestId}]:`, error);
 
         if (error.message?.includes('Failed to parse AI response')) {
-            return res.status(502).json({ error: 'AI Service Error', details: error.message });
+            return sendError(res, 502, 'AI Service Error', error.message);
         }
 
-        res.status(500).json({ error: 'Internal Server Error', details: error.message });
+        sendError(res, 500, 'Internal Server Error', error.message);
+    }
+});
+
+/**
+ * POST /api/ai/offert/reprice
+ * Recalculates estimate based on manual overrides and ROT settings.
+ */
+router.post('/reprice', async (req, res) => {
+    const requestId = res.locals.requestId;
+    try {
+        const { estimate_id, edits, rot_input, reset_overrides } = req.body as RepriceRequestV2;
+
+        if (!estimate_id) return sendError(res, 400, 'Missing estimate_id');
+
+        // 1. Validation
+        if (rot_input) {
+            if (![1, 2].includes(rot_input.owners_count)) {
+                return sendError(res, 400, 'owners_count must be 1 or 2');
+            }
+            if (rot_input.rot_used_sek < 0) {
+                return sendError(res, 400, 'rot_used_sek must be positive');
+            }
+        }
+
+        if (edits) {
+            for (const edit of edits) {
+                if (edit.qty !== undefined && edit.qty < 0) return sendError(res, 400, `Invalid qty for ${edit.line_item_id}`);
+                if (edit.unit_price_sek_incl_vat !== undefined && edit.unit_price_sek_incl_vat < 0) {
+                    return sendError(res, 400, `Invalid price for ${edit.line_item_id}`);
+                }
+                if (edit.labor_share_percent !== undefined && (edit.labor_share_percent < 0 || edit.labor_share_percent > 1)) {
+                    return sendError(res, 400, `Invalid labor_share for ${edit.line_item_id}`);
+                }
+            }
+        }
+
+        const existing = await loadEstimate(estimate_id);
+        if (!existing) return sendError(res, 404, 'Estimate not found');
+
+        // 2. Prepare new sections
+        const newSections = existing.sections.map(section => ({
+            ...section,
+            items: section.items.map(item => {
+                // Logic A: Reset Overrides
+                if (reset_overrides) {
+                    return {
+                        ...item,
+                        qty: item.original_qty ?? item.qty,
+                        unit_price_sek_incl_vat: item.original_unit_price ?? item.unit_price_sek_incl_vat,
+                        manual_override: undefined
+                    };
+                }
+
+                // Logic B: Apply Edits
+                const edit = edits?.find(e => e.line_item_id === item.id);
+                if (edit) {
+                    return {
+                        ...item,
+                        // Apply overrides
+                        qty: edit.qty ?? item.qty,
+                        unit: edit.unit ?? item.unit,
+                        unit_price_sek_incl_vat: edit.unit_price_sek_incl_vat ?? item.unit_price_sek_incl_vat,
+                        labor_share_percent: edit.labor_share_percent ?? item.labor_share_percent,
+                        is_rot_eligible: edit.is_rot_eligible ?? item.is_rot_eligible,
+                        manual_override: true
+                    };
+                }
+                return item;
+            })
+        }));
+
+        // 3. Fallback ROT inputs
+        const rotParamsInput = rot_input || existing.rot_input;
+
+        // 4. Recalculate
+        const updated = calculateEstimate(
+            newSections,
+            rotParamsInput,
+            estimate_id,
+            {
+                created_at_iso: existing.created_at_iso,
+                scope_summary_sv: existing.scope_summary_sv,
+                assumptions_sv: existing.assumptions_sv
+            }
+        );
+
+        await saveEstimate(updated);
+
+        res.json({ ...updated, request_id: requestId });
+    } catch (error: any) {
+        console.error(`[AI-Offert] Reprice error [${requestId}]:`, error);
+        sendError(res, 500, 'Internal Server Error', error.message);
     }
 });
 
@@ -338,25 +442,23 @@ router.post(
                 user: userId || 'unknown',
                 identifier_type: identifierType || 'unknown',
                 idempotency_key: idempotencyKey || 'unknown',
+                request_id: res.locals.requestId,
                 error: error.message || String(error),
                 error_code: error.code,
             }));
-            console.error('[AI-Offert] After-image error:', error);
+            console.error(`[AI-Offert] After-image error [${res.locals.requestId}]:`, error);
 
             // Handle Multer errors
             if (error.code === 'LIMIT_UNEXPECTED_FILE') {
-                return res.status(400).json({
-                    error: 'Invalid upload field',
-                    details: 'Use field name "image" or "before_image" for the image file',
-                });
+                return sendError(res, 400, 'Invalid upload field', 'Use field name "image" or "before_image" for the image file');
             }
 
             // Handle specific AI errors
             if (error.message?.includes('No image data') || error.message?.includes('Gemini image generation failed')) {
-                return res.status(502).json({ error: 'AI Service Error', details: error.message });
+                return sendError(res, 502, 'AI Service Error', error.message);
             }
 
-            res.status(500).json({ error: 'Internal Server Error', details: error.message });
+            sendError(res, 500, 'Internal Server Error', error.message);
         }
     }
 );

@@ -4,4 +4,7 @@ dist/
 .DS_Store
 *.log
 .env
+data/estimates/
+data/analysis/
+data/uploads/
 .env

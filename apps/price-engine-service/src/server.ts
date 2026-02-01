@@ -50,21 +50,36 @@ function apiCorsMiddleware(req: express.Request, res: express.Response, next: ex
         return res.sendStatus(204);
       }
     } else {
-      console.warn(`[CORS] rejected origin ${origin} for ${req.method} ${req.path}`);
+      console.warn(`[CORS] rejected origin ${origin} for ${req.method} ${req.originalUrl}`);
+      // NEW: Strict enforcement for AI Offert routes
+      if (req.originalUrl.includes("/api/ai/offert")) {
+        return res.status(403).json({
+          error: "CORS Forbidden",
+          details: "Origin not allowed",
+          request_id: res.locals.requestId
+        });
+      }
     }
   }
   next();
 }
 
+app.use("/api", (req, res, next) => {
+  res.locals.requestId = crypto.randomBytes(8).toString("hex");
+  res.setHeader("X-Request-Id", res.locals.requestId);
+  next();
+});
+
 app.use("/api", apiCorsMiddleware);
 
 app.use(express.json({ limit: "10mb" }));
+
+app.use("/api/ai/offert", aiOffertRouter);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-app.use("/api/ai/offert", aiOffertRouter);
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);

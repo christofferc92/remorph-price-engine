@@ -1,0 +1,58 @@
+{
+  "estimate_version": 2,
+  "estimate_id": "est_fixture_v2",
+  "currency": "SEK",
+  "created_at_iso": "2026-02-01T15:52:25.337Z",
+  "updated_at_iso": "2026-02-01T15:52:25.337Z",
+  "rot_input": {
+    "apply_rot": true,
+    "owners_count": 2,
+    "rot_used_sek": 0
+  },
+  "rot_params": {
+    "eligible_labor_base_ex_vat_sek": 8000,
+    "applied_percent": 0.3,
+    "max_cap_sek": 100000,
+    "remaining_cap_sek": 100000,
+    "max_cap_reached": false,
+    "warnings": []
+  },
+  "summary": {
+    "total_likely_incl_vat": 10000,
+    "total_low_incl_vat": 9000,
+    "total_high_incl_vat": 11000,
+    "total_excl_vat": 8000,
+    "total_vat": 2000,
+    "total_rot_deduction": 2400,
+    "net_to_pay": 7600,
+    "breakdown": {
+      "labor": 10000,
+      "material": 0,
+      "other": 0
+    }
+  },
+  "sections": [
+    {
+      "id": "sec_1",
+      "title_sv": "Rivning",
+      "items": [
+        {
+          "id": "item_1",
+          "name_sv": "Rivning plastmatta",
+          "qty": 10,
+          "unit": "m2",
+          "unit_price_sek_incl_vat": 1000,
+          "type": "labor",
+          "is_rot_eligible": true,
+          "total_likely_sek_incl_vat": 10000,
+          "total_low_sek_incl_vat": 9000,
+          "total_high_sek_incl_vat": 11000,
+          "original_qty": 10,
+          "original_unit_price": 1000
+        }
+      ]
+    }
+  ],
+  "scope_summary_sv": "",
+  "assumptions_sv": []
+}

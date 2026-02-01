@@ -1,6 +1,9 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AnalysisResponse, OffertResponse } from '../types';
 import { buildStep2Prompt } from '../prompts/bathroom/step2';
+import { buildStep2PromptV2 } from '../prompts/bathroom/step2_v2';
+import { calculateEstimate } from '../../lib/pricing';
+import { EstimateResponseV2 } from '../types';
 
 function getGenAIClient() {
     if (!process.env.GOOGLE_API_KEY) {
@@ -91,5 +94,52 @@ export async function generateOffertunderlag(
             console.error('Failed to parse AI response as JSON');
         }
         throw new Error('Failed to generate offert');
+    }
+}
+
+export async function generateOffertunderlagV2(
+    step1: AnalysisResponse,
+    answers: Record<string, any>
+): Promise<{ data: EstimateResponseV2; usageMetadata: any }> {
+    const genAI = getGenAIClient();
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+    const normalizedAnswers = normalizeAnswers(step1, answers);
+
+    const prompt = buildStep2PromptV2(
+        step1.image_observations,
+        step1.scope_guess,
+        normalizedAnswers
+    );
+
+    try {
+        const result = await model.generateContent(prompt);
+        const response = result.response;
+        let text = response.text();
+
+        const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) text = jsonMatch[1];
+
+        // AI returns partial structure: { sections: [], scope_description_sv, assumptions_sv }
+        const parsedContext = JSON.parse(text);
+
+        // Apply pricing logic
+        const fullOne = calculateEstimate(
+            parsedContext.sections || [],
+            { apply_rot: true, owners_count: 2, rot_used_sek: 0 },
+            'est_' + Date.now(),
+            {
+                scope_summary_sv: parsedContext.scope_description_sv || '',
+                assumptions_sv: parsedContext.assumptions_sv || []
+            }
+        );
+
+        return {
+            data: fullOne,
+            usageMetadata: response.usageMetadata
+        };
+    } catch (error) {
+        console.error('Error generating V2 offert:', error);
+        throw new Error('Failed to generate V2 offert');
     }
 }

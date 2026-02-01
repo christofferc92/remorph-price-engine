@@ -118,9 +118,11 @@ npm run generate:price-copy-catalog
 **File**: [apps/price-engine-service/src/server.ts](file:///Users/christofferchristiansen/remorph-price-engine-clean/apps/price-engine-service/src/server.ts)
 
 **Startup**:
-- Listens on `0.0.0.0:${PORT}` (default 3000)
+**Startup**:
+- Listens on `[::]:${PORT}` (all interfaces, IPv4/IPv6 dual-stack)
+- Runs connectivity self-test on startup (checks `127.0.0.1`, `[::1]`, and Fly private IPv6)
 - Initializes storage directories (`/data` or `./data` or temp fallback)
-- Logs: `Price engine service ready on port 3000`
+- Logs: `Price engine service ready on port 3000 (host: all interfaces)`
 
 ### Health Check
 

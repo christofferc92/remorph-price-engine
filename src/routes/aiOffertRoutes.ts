@@ -5,6 +5,13 @@ import { generateOffertunderlag } from '../ai-price-engine/services/offert-gener
 import { AnalysisResponse, OffertResponse } from '../ai-price-engine/types';
 import { generateAfterImage } from '../ai-image-engine';
 import { uploadPngAndSign } from '../lib/supabaseStorage';
+import {
+    isCircuitBreakerOpen,
+    checkRateLimits,
+    recordGeneration,
+    checkIdempotency,
+    cacheIdempotency,
+} from '../lib/guardrails';
 
 const router = Router();
 
@@ -100,7 +107,95 @@ router.post(
         { name: 'before_image', maxCount: 1 },
     ]),
     async (req, res) => {
+        // Declare variables outside try block for error handler access
+        let userId: string = 'unknown';
+        let identifierType: 'client_id' | 'ip' = 'ip';
+        let idempotencyKey: string = 'unknown';
+
         try {
+            // ============================================================
+            // GUARDRAILS: Circuit Breaker, Rate Limiting, Idempotency
+            // ============================================================
+
+            // 1. Circuit breaker check
+            if (!isCircuitBreakerOpen()) {
+                console.log(JSON.stringify({
+                    event: 'image_gen_blocked',
+                    timestamp: new Date().toISOString(),
+                    reason: 'circuit_breaker',
+                }));
+                return res.status(503).json({
+                    error: 'Service Unavailable',
+                    message: 'Image generation temporarily disabled',
+                });
+            }
+
+            // 2. Extract user identifier (client_id preferred, fallback to IP)
+            const clientId = req.body.client_id || req.headers['x-client-id'];
+            const ip = req.headers['fly-client-ip'] || req.ip || 'unknown';
+            userId = clientId || ip;
+            identifierType = clientId ? 'client_id' : 'ip';
+
+            // 3. Extract and validate idempotency key
+            idempotencyKey = (req.body.idempotency_key || req.headers['idempotency-key']) as string;
+            if (!idempotencyKey) {
+                return res.status(400).json({
+                    error: 'Bad Request',
+                    message: 'idempotency_key is required (UUID format)',
+                });
+            }
+
+            // 4. Check idempotency cache
+            const cachedResult = await checkIdempotency(idempotencyKey, userId);
+            if (cachedResult.exists) {
+                console.log(JSON.stringify({
+                    event: 'image_gen_idempotency_hit',
+                    timestamp: new Date().toISOString(),
+                    user: userId,
+                    identifier_type: identifierType,
+                    idempotency_key: idempotencyKey,
+                }));
+                return res.json(cachedResult.data);
+            }
+
+            // 5. Check rate limits (cooldown, user daily, global daily)
+            const rateLimitCheck = await checkRateLimits(userId, identifierType);
+            if (!rateLimitCheck.allowed) {
+                console.log(JSON.stringify({
+                    event: 'image_gen_blocked',
+                    timestamp: new Date().toISOString(),
+                    user: userId,
+                    identifier_type: identifierType,
+                    idempotency_key: idempotencyKey,
+                    reason: rateLimitCheck.reason,
+                    retry_after_seconds: rateLimitCheck.retryAfter,
+                }));
+
+                const statusCode = rateLimitCheck.reason?.includes('Global') ? 503 : 429;
+                return res.status(statusCode).json({
+                    error: statusCode === 503 ? 'Service Unavailable' : 'Too Many Requests',
+                    message: rateLimitCheck.reason,
+                    retry_after_seconds: rateLimitCheck.retryAfter,
+                });
+            }
+
+            // 6. Log attempt (allowed)
+            console.log(JSON.stringify({
+                event: 'image_gen_attempt',
+                timestamp: new Date().toISOString(),
+                user: userId,
+                identifier_type: identifierType,
+                idempotency_key: idempotencyKey,
+                allowed: true,
+            }));
+
+            // 7. Record generation (optimistic - before calling Gemini)
+            await recordGeneration(userId, identifierType);
+
+            // ============================================================
+            // EXISTING VALIDATION & PROCESSING
+            // ============================================================
+
             // Accept either 'image' or 'before_image' field name
             const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
             const file = files?.image?.[0] ?? files?.before_image?.[0];
@@ -183,7 +278,7 @@ router.post(
             // Check debug mode
             const isDebug = req.query.debug === '1' || process.env.RETURN_BASE64 === '1';
 
-            res.json({
+            const response = {
                 after_image_url: signedUrl,
                 after_image_path: storagePath,
                 mime_type: result.mime_type,
@@ -192,8 +287,35 @@ router.post(
                 latency_ms: latencyMs,
                 // Only include base64 in debug mode
                 after_image_base64: isDebug ? result.after_image_base64 : undefined,
-            });
+            };
+
+            // Cache response for idempotency
+            await cacheIdempotency(idempotencyKey, userId, response);
+
+            // Log success with metadata
+            console.log(JSON.stringify({
+                event: 'image_gen_success',
+                timestamp: new Date().toISOString(),
+                user: userId,
+                identifier_type: identifierType,
+                idempotency_key: idempotencyKey,
+                model: response.model,
+                latency_ms: latencyMs,
+                mime_type: result.mime_type,
+            }));
+
+            res.json(response);
         } catch (error: any) {
+            // Log failure with structured data
+            console.log(JSON.stringify({
+                event: 'image_gen_failure',
+                timestamp: new Date().toISOString(),
+                user: userId || 'unknown',
+                identifier_type: identifierType || 'unknown',
+                idempotency_key: idempotencyKey || 'unknown',
+                error: error.message || String(error),
+                error_code: error.code,
+            }));
             console.error('[AI-Offert] After-image error:', error);
 
             // Handle Multer errors

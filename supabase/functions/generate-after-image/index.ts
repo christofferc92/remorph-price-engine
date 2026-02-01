@@ -24,6 +24,13 @@ const COOLDOWN_SECONDS = 60;
 const USER_DAILY_LIMIT = 3;
 const GLOBAL_DAILY_LIMIT = 50;
 
+export const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, idempotency-key, x-client-id',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Max-Age': '86400',
+};
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
 
@@ -315,14 +322,9 @@ async function uploadAndSign(imageData: string, mimeType: string): Promise<{ pat
 
 serve(async (req) => {
     // CORS headers
+    // CORS headers
     if (req.method === 'OPTIONS') {
-        return new Response(null, {
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, idempotency-key, x-client-id',
-            },
-        });
+        return new Response('ok', { headers: corsHeaders });
     }
 
     let userId = 'unknown';
@@ -342,7 +344,7 @@ serve(async (req) => {
                 message: 'Image generation temporarily disabled',
             }), {
                 status: 503,
-                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
         }
 
@@ -363,7 +365,7 @@ serve(async (req) => {
                 message: 'idempotency_key is required (UUID format)',
             }), {
                 status: 400,
-                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
         }
 
@@ -382,7 +384,7 @@ serve(async (req) => {
                 model: cachedData.model || GEMINI_MODEL,
                 latency_ms: cachedData.latency_ms || 0,
             }), {
-                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
         }
 
@@ -401,7 +403,7 @@ serve(async (req) => {
                 retry_after_seconds: rateLimitCheck.retryAfter,
             }), {
                 status: statusCode,
-                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
         }
 
@@ -422,7 +424,7 @@ serve(async (req) => {
                 message: 'No image file provided',
             }), {
                 status: 400,
-                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
         }
 
@@ -594,7 +596,7 @@ serve(async (req) => {
         lastStep = 'STEP_100';
 
         return new Response(JSON.stringify(response), {
-            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
 
     } catch (error: any) {
@@ -608,7 +610,7 @@ serve(async (req) => {
             last_step: lastStep,
         }), {
             status: 500,
-            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
     }
 });

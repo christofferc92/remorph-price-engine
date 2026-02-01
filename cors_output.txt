@@ -1,0 +1,74 @@
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0* Host rgmpclaxbfeyzxnyepjs.functions.supabase.co:443 was resolved.
+* IPv6: (none)
+* IPv4: 172.64.149.246, 104.18.38.10
+*   Trying 172.64.149.246:443...
+* Connected to rgmpclaxbfeyzxnyepjs.functions.supabase.co (172.64.149.246) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [347 bytes data]
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [2538 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [79 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-CHACHA20-POLY1305-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=supabase.co
+*  start date: Jan 13 01:27:53 2026 GMT
+*  expire date: Apr 13 02:27:45 2026 GMT
+*  subjectAltName: host "rgmpclaxbfeyzxnyepjs.functions.supabase.co" matched cert's "*.functions.supabase.co"
+*  issuer: C=US; O=Google Trust Services; CN=WE1
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://rgmpclaxbfeyzxnyepjs.functions.supabase.co/generate-after-image
+* [HTTP/2] [1] [:method: OPTIONS]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: rgmpclaxbfeyzxnyepjs.functions.supabase.co]
+* [HTTP/2] [1] [:path: /generate-after-image]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+* [HTTP/2] [1] [origin: http://localhost:3000]
+> OPTIONS /generate-after-image HTTP/2
+> Host: rgmpclaxbfeyzxnyepjs.functions.supabase.co
+> User-Agent: curl/8.7.1
+> Accept: */*
+> Origin: http://localhost:3000
+> 
+* Request completely sent off
+< HTTP/2 200 
+< date: Sun, 01 Feb 2026 14:38:32 GMT
+< content-type: text/plain;charset=UTF-8
+< server: cloudflare
+< cf-ray: 9c72316bc8d9c3b8-ARN
+< cf-cache-status: DYNAMIC
+< access-control-allow-origin: *
+< strict-transport-security: max-age=31536000; includeSubDomains; preload
+< vary: Accept-Encoding
+< access-control-allow-headers: authorization, x-client-info, apikey, content-type, idempotency-key, x-client-id
+< access-control-allow-methods: POST, OPTIONS
+< access-control-max-age: 86400
+< sb-gateway-version: 1
+< sb-project-ref: rgmpclaxbfeyzxnyepjs
+< sb-request-id: 019c19a4-1f72-7b41-90ff-e294c86e1eac
+< x-deno-execution-id: c80a83f1-868a-4af0-abcd-acdf901831df
+< x-sb-edge-region: eu-central-1
+< x-served-by: supabase-edge-runtime
+< set-cookie: __cf_bm=SL8LR3KJss3PdguiNMndBDjkL_RcxxeMO4w3__fAo5w-1769956712-1.0.1.1-C0tCGgWO3pr15U0Q2gS8DMU7h_JYjHv.h0KxHJDi5.z7KUlUy7DDbm5hMekk1.HkaA8cI54lK86Yg0pRDXrAARhwBRu.cqCYcneQCAuyAlU; path=/; expires=Sun, 01-Feb-26 15:08:32 GMT; domain=.supabase.co; HttpOnly; Secure; SameSite=None
+< alt-svc: h3=":443"; ma=86400
+< 
+{ [2 bytes data]
+100     2    0     2    0     0      6      0 --:--:-- --:--:-- --:--:--     6
+* Connection #0 to host rgmpclaxbfeyzxnyepjs.functions.supabase.co left intact
+ok

@@ -19,7 +19,7 @@ function getGenAIClient() {
 export async function analyzeBathroomImage(
     imageBuffer: Buffer,
     userDescription: string = ''
-): Promise<AnalysisResponse> {
+): Promise<{ data: AnalysisResponse; usageMetadata: any }> {
     const genAI = getGenAIClient();
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
@@ -53,7 +53,10 @@ export async function analyzeBathroomImage(
         // Parse JSON response
         const analysis: AnalysisResponse = JSON.parse(text);
 
-        return analysis;
+        return {
+            data: analysis,
+            usageMetadata: response.usageMetadata
+        };
     } catch (error) {
         console.error('Error analyzing bathroom image:', error);
         if (error instanceof SyntaxError) {

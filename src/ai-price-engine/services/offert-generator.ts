@@ -53,7 +53,7 @@ function normalizeAnswers(
 export async function generateOffertunderlag(
     step1: AnalysisResponse,
     answers: Record<string, any>
-): Promise<OffertResponse> {
+): Promise<{ data: OffertResponse; usageMetadata: any }> {
     const genAI = getGenAIClient();
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
@@ -81,7 +81,10 @@ export async function generateOffertunderlag(
         // Parse JSON response
         const offert: OffertResponse = JSON.parse(text);
 
-        return offert;
+        return {
+            data: offert,
+            usageMetadata: response.usageMetadata
+        };
     } catch (error) {
         console.error('Error generating offert:', error);
         if (error instanceof SyntaxError) {

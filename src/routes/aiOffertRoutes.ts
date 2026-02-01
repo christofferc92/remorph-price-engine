@@ -12,6 +12,7 @@ import {
     checkIdempotency,
     cacheIdempotency,
 } from '../lib/guardrails';
+import { estimateTextCostUsd } from '../lib/costDebug';
 
 const router = Router();
 
@@ -43,9 +44,21 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
         const description = req.body.description || '';
 
         // Call AI Price Engine Step 1
-        const analysis = await analyzeBathroomImage(imageBuffer, description);
+        const { data: analysis, usageMetadata } = await analyzeBathroomImage(imageBuffer, description);
 
-        res.json(analysis);
+        const debug_cost = {
+            step: 'analysis',
+            model: 'gemini-2.5-flash',
+            input_tokens: usageMetadata?.promptTokenCount || 0,
+            output_tokens: usageMetadata?.candidatesTokenCount || 0,
+            estimated_cost_usd: estimateTextCostUsd({
+                model: 'gemini-2.5-flash',
+                input_tokens: usageMetadata?.promptTokenCount || 0,
+                output_tokens: usageMetadata?.candidatesTokenCount || 0
+            })
+        };
+
+        res.json({ ...analysis, debug_cost });
     } catch (error: any) {
         console.error('[AI-Offert] Analyze error:', error);
 
@@ -74,9 +87,21 @@ router.post('/generate', async (req, res) => {
         }
 
         // Call AI Price Engine Step 2
-        const offert = await generateOffertunderlag(step1 as AnalysisResponse, answers);
+        const { data: offert, usageMetadata } = await generateOffertunderlag(step1 as AnalysisResponse, answers);
 
-        res.json(offert);
+        const debug_cost = {
+            step: 'estimation',
+            model: 'gemini-2.5-flash',
+            input_tokens: usageMetadata?.promptTokenCount || 0,
+            output_tokens: usageMetadata?.candidatesTokenCount || 0,
+            estimated_cost_usd: estimateTextCostUsd({
+                model: 'gemini-2.5-flash',
+                input_tokens: usageMetadata?.promptTokenCount || 0,
+                output_tokens: usageMetadata?.candidatesTokenCount || 0
+            })
+        };
+
+        res.json({ ...offert, debug_cost });
     } catch (error: any) {
         console.error('[AI-Offert] Generate error:', error);
 

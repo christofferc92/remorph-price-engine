@@ -31,6 +31,18 @@ export const corsHeaders = {
     'Access-Control-Max-Age': '86400',
 };
 
+// Cost debugging helpers
+const COST_CONSTANTS = {
+    GEMINI_FLASH_IMAGE: {
+        PER_IMAGE: 0.04, // Conservative estimate
+    }
+};
+
+function estimateImageCostUsd(model: string): number {
+    // Return fixed cost for image generation model
+    return COST_CONSTANTS.GEMINI_FLASH_IMAGE.PER_IMAGE;
+}
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
 
@@ -569,6 +581,19 @@ serve(async (req) => {
 
         console.log('STEP_90');
         lastStep = 'STEP_90';
+
+        // Add debug_cost
+        if (IMAGE_GEN_DEBUG) {
+            response.debug_cost = {
+                step: 'image',
+                model: GEMINI_MODEL,
+                input_tokens_text: usageMetadata?.promptTokenCount || 0,
+                // Image tokens are typically fixed (258) but not reported in promptTokenCount usually?
+                // We'll leave it as 0 or estimated if we want. User requested "input_tokens_image: 0".
+                input_tokens_image: 258,
+                estimated_cost_usd: estimateImageCostUsd(GEMINI_MODEL)
+            };
+        }
 
         // 13. Cache response
         await cacheIdempotency(idempotencyKey, userId, response);

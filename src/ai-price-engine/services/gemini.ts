@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import sharp from 'sharp';
 import { AnalysisResponse } from '../types';
 import { buildStep1Prompt } from '../prompts/bathroom/step1';
 
@@ -20,17 +21,37 @@ export async function analyzeBathroomImage(
     imageBuffer: Buffer,
     userDescription: string = ''
 ): Promise<{ data: AnalysisResponse; usageMetadata: any }> {
-    const genAI = getGenAIClient();
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const tTotalStart = performance.now();
+    const original_bytes = imageBuffer.length;
 
-    // Convert image to base64
-    const base64Image = imageBuffer.toString('base64');
+    // 1. Image Preprocessing: Downscale to 1024px and JPEG 75
+    const tResizeStart = performance.now();
+    const optimizedBuffer = await sharp(imageBuffer)
+        .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 75 })
+        .toBuffer();
+    const tResizeEnd = performance.now();
+    const resize_time_ms = Math.round(tResizeEnd - tResizeStart);
+    const resized_bytes = optimizedBuffer.length;
+
+    const genAI = getGenAIClient();
+    const model = genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        generationConfig: {
+            responseMimeType: "application/json",
+            maxOutputTokens: 1024,
+        }
+    });
+
+    // Convert optimized image to base64
+    const base64Image = optimizedBuffer.toString('base64');
 
     // Build prompt using bathroom-specific prompt builder
     const prompt = buildStep1Prompt(userDescription);
 
     try {
-        // Generate content with image and prompt
+        // 2. Generate content with optimized image and constraints
+        const tGeminiStart = performance.now();
         const result = await model.generateContent([
             {
                 inlineData: {
@@ -38,13 +59,18 @@ export async function analyzeBathroomImage(
                     mimeType: 'image/jpeg',
                 },
             },
-            { text: prompt },
+            { text: prompt + "\nReturn ONLY concise JSON. No markdown." },
         ]);
 
         const response = result.response;
+        const gemini_time_ms = Math.round(performance.now() - tGeminiStart);
+        const total_ms = Math.round(performance.now() - tTotalStart);
+
+        console.log(`[PERF_AI_ANALYZE] original_bytes=${original_bytes} resized_bytes=${resized_bytes} resize_time_ms=${resize_time_ms} gemini_time_ms=${gemini_time_ms} total_ms=${total_ms}`);
+
         let text = response.text();
 
-        // Strip markdown code blocks if present (```json ... ```)
+        // Strip markdown code blocks if present (though JSON mode should prevent this)
         const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
         if (jsonMatch) {
             text = jsonMatch[1];

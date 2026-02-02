@@ -4,8 +4,68 @@
  * Future: Add prompts/kitchen, prompts/painting for other room types
  */
 
-export function buildStep1Prompt(userDescription: string): string {
-    return `You are an assistant for Swedish renovation estimating. Your job in STEP 1 is to analyze the provided image and the user's text description and generate EXACTLY 10 follow-up questions needed to produce a contractor-usable "offertunderlag" and an initial price range estimate in SEK (kr) later.
+export function buildStep1Prompt(userDescription: string, simplified: boolean = false): string {
+  const schema = simplified
+    ? `{
+  "inferred_project_type": "bathroom",
+  "follow_up_questions": [
+    {
+      "id": "q1",
+      "priority": 1,
+      "question_sv": "Short question in Swedish?",
+      "type": "yes_no" | "single_choice" | "number",
+      "options": ["option1", "option2"],
+      "maps_to": "scope_level",
+      "why_it_matters_sv": "1 short sentence in Swedish",
+      "ask_mode": "ask",
+      "prefill_guess": null,
+      "prefill_confidence": null,
+      "prefill_basis_sv": null
+    }
+    ... EXACTLY 10 total questions ...
+  ]
+}`
+    : `{
+  "inferred_project_type": "bathroom",
+  "image_observations": {
+    "summary_sv": "Brief summary in Swedish of what you see",
+    "inferred_size_sqm": {
+      "value": <number>,
+      "confidence": "low" | "medium" | "high",
+      "basis_sv": "Explanation in Swedish"
+    },
+    "visible_elements": ["element1", "element2", ...],
+    "uncertainties": ["uncertainty1", ...]
+  },
+  "scope_guess": {
+    "value": "floor_only" | "floor_plus_heat" | "partial_bathroom" | "full_bathroom" | "unclear",
+    "confidence": "low" | "medium" | "high",
+    "basis_sv": "Explanation in Swedish"
+  },
+  "follow_up_questions": [
+    {
+      "id": "q1",
+      "priority": 1,
+      "question_sv": "Question in Swedish?",
+      "type": "yes_no" | "single_choice" | "text" | "number",
+      "options": ["option1", "option2", "Vet ej"],
+      "maps_to": "scope_level",
+      "why_it_matters_sv": "Short explanation in Swedish",
+      "ask_mode": "confirm" | "ask",
+      "prefill_guess": "value from image" | null,
+      "prefill_confidence": "low" | "medium" | "high" | null,
+      "prefill_basis_sv": "Why I guessed this from the image" | null
+    }
+    ... EXACTLY 10 total questions ...
+  ]
+}`;
+
+  const retryInstructions = simplified
+    ? "\nSTRICT RULE: Be extremely concise. Max 10 words per text field. No long explanations. Swedish language."
+    : "";
+
+  return `You are an assistant for Swedish renovation estimating. Your job in STEP 1 is to analyze the provided image and the user's text description and generate EXACTLY 10 follow-up questions needed to produce a contractor-usable "offertunderlag" and an initial price range estimate in SEK (kr) later.
+${retryInstructions}
 
 USER'S DESCRIPTION: "${userDescription}"
 
@@ -56,40 +116,7 @@ NEVER PREFILL (always ask_mode="ask"):
 - User preferences (timeline, budget tier, etc.)
 
 Return ONLY valid JSON matching this exact schema:
-{
-  "inferred_project_type": "bathroom",
-  "image_observations": {
-    "summary_sv": "Brief summary in Swedish of what you see",
-    "inferred_size_sqm": {
-      "value": <number>,
-      "confidence": "low" | "medium" | "high",
-      "basis_sv": "Explanation in Swedish"
-    },
-    "visible_elements": ["element1", "element2", ...],
-    "uncertainties": ["uncertainty1", ...]
-  },
-  "scope_guess": {
-    "value": "floor_only" | "floor_plus_heat" | "partial_bathroom" | "full_bathroom" | "unclear",
-    "confidence": "low" | "medium" | "high",
-    "basis_sv": "Explanation in Swedish"
-  },
-  "follow_up_questions": [
-    {
-      "id": "q1",
-      "priority": 1,
-      "question_sv": "Question in Swedish?",
-      "type": "yes_no" | "single_choice" | "text" | "number",
-      "options": ["option1", "option2", "Vet ej"],
-      "maps_to": "scope_level",
-      "why_it_matters_sv": "Short explanation in Swedish",
-      "ask_mode": "confirm" | "ask",
-      "prefill_guess": "value from image" | null,
-      "prefill_confidence": "low" | "medium" | "high" | null,
-      "prefill_basis_sv": "Why I guessed this from the image" | null
-    }
-    ... EXACTLY 10 total questions ...
-  ]
-}
+${schema}
 
 CRITICAL RULES:
 - Must be EXACTLY 10 questions in follow_up_questions array

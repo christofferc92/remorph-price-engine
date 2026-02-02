@@ -44,8 +44,8 @@ export interface ScopeGuess {
 
 export interface AnalysisResponse {
     inferred_project_type: string;
-    image_observations: ImageObservations;
-    scope_guess: ScopeGuess;
+    image_observations?: ImageObservations;
+    scope_guess?: ScopeGuess;
     follow_up_questions: FollowUpQuestion[];
 }
 

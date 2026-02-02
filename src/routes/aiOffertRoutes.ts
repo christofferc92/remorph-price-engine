@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { analyzeBathroomImage } from '../ai-price-engine/services/gemini';
+import { analyzeBathroomImage, AiAnalysisError } from '../ai-price-engine/services/gemini';
 import { generateOffertunderlag } from '../ai-price-engine/services/offert-generator';
 import { AnalysisResponse, OffertResponse } from '../ai-price-engine/types';
 import { generateAfterImage } from '../ai-image-engine';
@@ -52,27 +52,64 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
         const imageBuffer = req.file.buffer;
         const description = req.body.description || '';
 
-        // Call AI Price Engine Step 1
-        const { data: analysis, usageMetadata } = await analyzeBathroomImage(imageBuffer, description);
+        // Call AI Price Engine Step 1 with automatic retry
+        let analysis: AnalysisResponse | undefined;
+        let usage: any;
+        let lastError: any;
+
+        try {
+            // Attempt 1
+            const result = await analyzeBathroomImage(imageBuffer, description, requestId, { isRetry: false });
+            analysis = result.data;
+            usage = result.usageMetadata;
+        } catch (error: any) {
+            if (error instanceof AiAnalysisError && (error.stage === 'gemini_parse' || error.stage === 'schema_validate')) {
+                console.log(`[AI-Offert] [${requestId}] Attempt 1 failed (stage=${error.stage}). Retrying with simplified contract...`);
+                try {
+                    // Attempt 2 (Retry)
+                    const result = await analyzeBathroomImage(imageBuffer, description, requestId, { isRetry: true });
+                    analysis = result.data;
+                    usage = result.usageMetadata;
+                } catch (retryError: any) {
+                    lastError = retryError;
+                }
+            } else {
+                lastError = error;
+            }
+        }
+
+        if (!analysis) {
+            throw lastError;
+        }
 
         const debug_cost = {
             step: 'analysis',
             model: 'gemini-2.5-flash',
-            input_tokens: usageMetadata?.promptTokenCount || 0,
-            output_tokens: usageMetadata?.candidatesTokenCount || 0,
+            input_tokens: usage?.promptTokenCount || 0,
+            output_tokens: usage?.candidatesTokenCount || 0,
             estimated_cost_usd: estimateTextCostUsd({
                 model: 'gemini-2.5-flash',
-                input_tokens: usageMetadata?.promptTokenCount || 0,
-                output_tokens: usageMetadata?.candidatesTokenCount || 0
+                input_tokens: usage?.promptTokenCount || 0,
+                output_tokens: usage?.candidatesTokenCount || 0
             })
         };
 
         res.json({ ...analysis, debug_cost, request_id: requestId });
     } catch (error: any) {
-        console.error(`[AI-Offert] Analyze error [${requestId}]:`, error);
+        if (error instanceof AiAnalysisError) {
+            console.error(`[AI-Offert] Analyze model error [${requestId}] stage=${error.stage}:`, error.message);
+            return res.status(422).json({
+                error: "invalid_model_output",
+                request_id: requestId,
+                stage: error.stage,
+                details: error.message
+            });
+        }
 
-        if (error.message?.includes('Failed to parse AI response') || error.message?.includes('GoogleGenerativeAI')) {
-            return sendError(res, 502, 'AI Service Error', error.message);
+        console.error(`[AI-Offert] Analyze server error [${requestId}]:`, error);
+
+        if (error.message?.includes('GoogleGenerativeAI')) {
+            return sendError(res, 502, 'AI Service Unavailable', error.message);
         }
 
         sendError(res, 500, 'Internal Server Error', error.message);

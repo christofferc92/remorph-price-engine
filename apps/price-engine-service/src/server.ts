@@ -435,6 +435,10 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (res.headersSent) {
     return;

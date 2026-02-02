@@ -28,17 +28,17 @@ export type AnalysisResult = {
 
 export type Selection = {
   floor_finish:
-    | "wetroom_vinyl"
-    | "ceramic_tile_standard"
-    | "ceramic_tile_premium"
-    | "microcement"
-    | "keep";
+  | "wetroom_vinyl"
+  | "ceramic_tile_standard"
+  | "ceramic_tile_premium"
+  | "microcement"
+  | "keep";
   wall_finish:
-    | "wetroom_vinyl"
-    | "ceramic_tile_standard"
-    | "ceramic_tile_premium"
-    | "painted_walls"
-    | "keep";
+  | "wetroom_vinyl"
+  | "ceramic_tile_standard"
+  | "ceramic_tile_premium"
+  | "painted_walls"
+  | "keep";
   fixtures_tier: "basic" | "standard" | "premium";
   shower_niches: "none" | "one" | "two_or_more";
   pipe_reroute?: boolean;
@@ -91,6 +91,10 @@ export type EstimateResponse = {
   needs_confirmation_ids: string[];
   derived_areas: { non_tiled_wall_area_m2: number | null };
   site_conditions_allowances?: SiteConditionsAllowanceSummary | null;
+  rot_deduction_sek?: number;
+  total_after_rot_sek?: number;
+  rot_cap_sek?: number;
+  price_range_sek?: { min: number; max: number };
 };
 
 type AreaField = "floor_area_m2" | "wall_area_m2" | "ceiling_area_m2" | "wet_zone_wall_area_m2";
@@ -325,11 +329,11 @@ function buildTasks({
   flags: Set<string>;
   room: Record<AreaField, number | null> & { walls_fully_tiled?: boolean };
   fixtures: Fixtures;
-    selections: Selection;
-    intents: IntentMap;
-    needsConfirmations: Set<string>;
-    surfacesChanged: boolean;
-  }): TaskLine[] {
+  selections: Selection;
+  intents: IntentMap;
+  needsConfirmations: Set<string>;
+  surfacesChanged: boolean;
+}): TaskLine[] {
   // Defensive grab in case type stripping drops destructured binding
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const surfacesChanged = (arguments[0] as any).surfacesChanged;

@@ -171,6 +171,7 @@ export const canonicalEstimatorContractSchema = z
     measurementOverride: measurementOverrideSchema.optional(),
     roomMeasurements: roomMeasurementsSchema.optional(),
     site_conditions: siteConditionsSchema.optional(),
+    rot_context: z.object({ owners_count: z.number().min(1).max(2).default(1) }).optional(),
   })
   .strict();
 

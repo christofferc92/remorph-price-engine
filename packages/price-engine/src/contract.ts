@@ -260,15 +260,16 @@ export function computeAnalysisContract(
   const sizeProbInfo = analyzeSizeBucketProbs(ai_raw.size_bucket_probs);
   const sizeBucket = resolveSizeBucket(ai_raw.floor_area_m2, ai_raw.size_bucket_choice, sizeProbInfo.bucket);
   const sizeBucketConfidence = clamp01(
-    typeof ai_raw.size_bucket_confidence === "number" ? ai_raw.size_bucket_confidence : sizeProbInfo.maxProb
+    typeof ai_raw.size_bucket_confidence === "number" ? ai_raw.size_bucket_confidence : sizeProbInfo.maxProb,
+    0.5
   );
-  const analysisConfidence = clamp01(ai_raw.confidence_scale);
+  const analysisConfidence = clamp01(ai_raw.confidence_scale, 0.5);
   const overallCondition: CanonicalEstimatorContract["analysis"]["condition_signals"]["overall_condition"] =
     accepted === true && warnings.length === 0
       ? "good"
       : warnings.length > 0
-      ? "average"
-      : "unknown";
+        ? "average"
+        : "unknown";
   const placeholders = new Set<string>();
   const addPlaceholder = (value: string) => placeholders.add(value);
   if (ai_raw.walls_fully_tiled == null) addPlaceholder("layout_features.wet_room_layout");
@@ -653,8 +654,8 @@ function pickScenario(value: number | null | undefined, range: any, key: "low" |
 function pickTotals(est: any) {
   return est
     ? {
-        totals: est.totals,
-      }
+      totals: est.totals,
+    }
     : { totals: { base_subtotal_sek: 0, project_management_sek: 0, contingency_sek: 0, grand_total_sek: 0 } };
 }
 
@@ -793,15 +794,15 @@ export function computeOutlierFlags(profile: SweepProfile, estimateResult: any) 
   const bands =
     quality === "rough"
       ? {
-          refresh: [15000, 80000],
-          full_rebuild: [70000, 200000],
-          major: [130000, 320000],
-        }
+        refresh: [15000, 80000],
+        full_rebuild: [70000, 200000],
+        major: [130000, 320000],
+      }
       : {
-          refresh: [20000, 60000],
-          full_rebuild: [80000, 180000],
-          major: [150000, 300000],
-        };
+        refresh: [20000, 60000],
+        full_rebuild: [80000, 180000],
+        major: [150000, 300000],
+      };
 
   if (profile === "refresh" && mid != null) {
     const [lo, hi] = bands.refresh;
@@ -845,7 +846,7 @@ const QUALITY_TIER_MAP: Record<string, ConfidenceTier> = {
 const BLOCKING_NEEDS = new Set(["NC-001", "NC-002", "NC-003", "NC-004"]);
 
 const ROT_RATE = clampNumber(parseEnvNumber(process.env.ROT_RATE, 0.3), 0, 1);
-const ROT_MAX_DEDUCTION = parseEnvNumber(process.env.ROT_MAX_SEK, Infinity);
+const ROT_MAX_DEDUCTION = parseEnvNumber(process.env.ROT_MAX_SEK, 50000);
 
 function parseEnvNumber(value: string | undefined, fallback: number) {
   if (typeof value === "string" && value.trim() !== "") {
@@ -915,16 +916,17 @@ function deriveConfidenceTier(input: {
 
 function computeRotSummary(
   lineItems: Array<{ labor_sek: number; rot_eligible?: boolean }>,
-  totals: { grand_total_sek?: number } | undefined
+  totals: { grand_total_sek?: number } | undefined,
+  owners_count = 1
 ) {
   const rotEligibleLabor = lineItems.reduce(
     (sum, item) => sum + (item.rot_eligible ? Math.round(Number(item.labor_sek ?? 0)) : 0),
     0
   );
   const rawDeduction = Math.round(rotEligibleLabor * ROT_RATE);
-  const cappedDeduction =
-    Number.isFinite(ROT_MAX_DEDUCTION) && ROT_MAX_DEDUCTION >= 0 ? Math.min(rawDeduction, ROT_MAX_DEDUCTION) : rawDeduction;
-  const capApplied = Number.isFinite(ROT_MAX_DEDUCTION) && rawDeduction > ROT_MAX_DEDUCTION;
+  const effectiveMax = ROT_MAX_DEDUCTION * owners_count;
+  const cappedDeduction = Math.min(rawDeduction, effectiveMax);
+  const capApplied = rawDeduction > effectiveMax;
   const grandTotal = Math.round(totals?.grand_total_sek ?? 0);
   const deduction = capApplied ? cappedDeduction : rawDeduction;
   const totalAfterRot = Math.max(grandTotal - deduction, 0);
@@ -935,7 +937,7 @@ function computeRotSummary(
     total_after_rot_sek: totalAfterRot,
     rot_cap_applied: capApplied,
     rot_cap_reason: capApplied ? "rot_max_limit" : "unknown_user_tax_limit",
-    rot_cap_sek: Number.isFinite(ROT_MAX_DEDUCTION) ? ROT_MAX_DEDUCTION : undefined,
+    rot_cap_sek: effectiveMax,
   };
 }
 
@@ -1014,7 +1016,7 @@ export function buildFrontendEstimate(
     info_flags: flags?.info_flags,
     outlier_flags: flags?.outlier_flags,
   });
-  const rot_summary = computeRotSummary(line_items, estimateResult.totals);
+  const rot_summary = computeRotSummary(line_items, estimateResult.totals, normalized.rot_context?.owners_count ?? 1);
   const site_conditions_effect = summarizeSiteConditionsEffect(
     line_items,
     estimateResult.site_conditions_allowances?.reason_codes || []
@@ -1041,6 +1043,13 @@ export function buildFrontendEstimate(
     confidence_reasons,
     rot_summary,
     site_conditions_effect,
+    rot_deduction_sek: rot_summary?.rot_deduction_sek,
+    total_after_rot_sek: rot_summary?.total_after_rot_sek,
+    rot_cap_sek: rot_summary?.rot_cap_sek,
+    price_range_sek: {
+      min: estimateRange.low_sek ?? 0,
+      max: estimateRange.high_sek ?? 0,
+    },
   };
 }
 
@@ -1050,6 +1059,7 @@ export function evaluateContract(
 ) {
   const mapperResult = mapOutcomeToEstimatorInputs(contract.outcome);
   const normalized = buildNormalizedFromContract(contract, options?.imageId, mapperResult);
+  (normalized as any).rot_context = contract.rot_context; // Pass through ROT context
   const profile = options?.profile ?? determineProfileFromOutcome(contract.outcome);
   const siteConditionsAllowances = computeSiteConditionsAllowances(contract.site_conditions);
   const rangeSignals = deriveRangeSignals(contract);

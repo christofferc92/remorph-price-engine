@@ -140,6 +140,11 @@ export type UserOutcomeContract = {
   floor_heating?: FloorHeatingOption;
 };
 
+
+export type RotContext = {
+  owners_count: number;
+};
+
 export type CanonicalEstimatorContract = {
   analysis: AnalysisContract;
   overrides: UserOverrideContract;
@@ -147,6 +152,7 @@ export type CanonicalEstimatorContract = {
   measurementOverride?: MeasurementOverride;
   roomMeasurements?: RoomMeasurements;
   site_conditions?: SiteConditions;
+  rot_context?: RotContext;
 };
 
 export const sizeBucketOptions: { value: SizeBucket; label: string }[] = [

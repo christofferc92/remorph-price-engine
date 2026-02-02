@@ -243,6 +243,11 @@ function createResultId() {
 }
 
 export async function handleEstimateRequest(req: express.Request, res: express.Response) {
+  const t0 = performance.now();
+  let tValidate = 0;
+  let tAdapt = 0;
+  let tParse2 = 0;
+  let tEvaluate = 0;
   let payload = req.body as Record<string, unknown>;
   ensureOutcomeShowerNiches(payload);
   let parseResult = canonicalEstimatorContractSchema.safeParse(payload);
@@ -273,7 +278,30 @@ export async function handleEstimateRequest(req: express.Request, res: express.R
 
   const contract = parseResult.data;
   try {
+    const startEvaluate = performance.now();
     const contractResult = evaluateContract(contract);
+    tEvaluate = performance.now() - startEvaluate;
+
+    // --- DEBUG LOGGING START ---
+    const requestId = res.locals.requestId || "unknown";
+    const bodyHash = crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex").slice(0, 8);
+    const sizeBucket = contract.analysis.bathroom_size_estimate;
+    const sizeSource = contract.overrides.bathroom_size_source;
+    const finalSize = contract.overrides.bathroom_size_final;
+    const lineItemCount = contractResult.clientEstimate.line_items.length;
+    const totalPrice = contractResult.clientEstimate.totals.grand_total_sek;
+    const adapterUsed = (parseResult as any).error ? true : false; // Crude check if we had to adapt, actually logic above logs 'adapter_used=true'
+
+    const totalMs = performance.now() - t0;
+    console.log(`[PERF_ESTIMATE] req_id=${requestId} total_ms=${totalMs.toFixed(2)} validate_ms=${tValidate.toFixed(2)} adapt_ms=${tAdapt.toFixed(2)} parse2_ms=${tParse2.toFixed(2)} compute_ms=${tEvaluate.toFixed(2)}`);
+
+    console.log(`[DEBUG_ESTIMATE] ID=${requestId} Hash=${bodyHash} Adapter=${adapterUsed}`);
+    console.log(`[DEBUG_ESTIMATE] Size=${sizeBucket} Source=${sizeSource} Final=${finalSize}`);
+    console.log(`[DEBUG_ESTIMATE] Fixtures: Shower=${contract.analysis.detected_fixtures.shower_present} Bath=${contract.analysis.detected_fixtures.bathtub_present} Toilet=${contract.analysis.detected_fixtures.toilet_present} Sink=${contract.analysis.detected_fixtures.sink_present}`);
+    console.log(`[DEBUG_ESTIMATE] Outcome: Layout=${contract.outcome.layout_change} Std=${contract.outcome.shower_type}`);
+    console.log(`[DEBUG_ESTIMATE] LineItems=${lineItemCount} TotalPrice=${totalPrice}`);
+    // --- DEBUG LOGGING END ---
+
     const metadata = {
       contract,
       overrides: contract.overrides,

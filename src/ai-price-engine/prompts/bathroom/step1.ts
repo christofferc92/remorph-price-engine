@@ -4,7 +4,12 @@
  * Future: Add prompts/kitchen, prompts/painting for other room types
  */
 
+import { analyzeDescription, buildContextInstructions } from '../../lib/descriptionAnalyzer';
+
 export function buildStep1Prompt(userDescription: string, simplified: boolean = false): string {
+  // Analyze user description for intent and preferences
+  const analysis = analyzeDescription(userDescription);
+  const contextInstructions = buildContextInstructions(analysis);
   const schema = simplified
     ? `{
   "inferred_project_type": "bathroom",
@@ -68,6 +73,7 @@ export function buildStep1Prompt(userDescription: string, simplified: boolean = 
 ${retryInstructions}
 
 USER'S DESCRIPTION: "${userDescription}"
+${contextInstructions}
 
 Key principles:
 - Focus on questions that materially affect cost, scope, time, risk, and trade requirements in Sweden.

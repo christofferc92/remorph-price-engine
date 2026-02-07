@@ -208,7 +208,7 @@ function buildPreserveList(
         preserve.push('Lighting fixtures');
 
         // Add visible elements from step1
-        if (step1.image_observations.visible_elements.length > 0) {
+        if (step1.image_observations?.visible_elements && step1.image_observations.visible_elements.length > 0) {
             preserve.push(`Visible fixtures: ${step1.image_observations.visible_elements.join(', ')}`);
         }
     } else {
@@ -231,7 +231,44 @@ function buildPreserveList(
 }
 
 /**
+ * Build adaptive style guidance based on budget tier and answers
+ */
+function buildStyleGuidance(parsed: ParsedAnswers): string[] {
+    const style: string[] = [];
+
+    // Base Swedish aesthetic
+    style.push('Modern Swedish bathroom aesthetic');
+
+    // Adapt based on tile price tier
+    if (parsed.tilePriceTier) {
+        const tier = parsed.tilePriceTier.toLowerCase();
+        if (tier.includes('budget') || tier.includes('ekonomisk')) {
+            style.push('Cost-effective but quality finishes');
+            style.push('Simple, clean lines');
+        } else if (tier.includes('premium') || tier.includes('lyx')) {
+            style.push('Premium, high-end finishes and materials');
+            style.push('Sophisticated details and textures');
+        } else {
+            style.push('High-quality finishes and materials');
+        }
+    } else {
+        style.push('High-quality finishes and materials');
+    }
+
+    style.push('Proper lighting (natural and artificial)');
+    style.push('Realistic textures and reflections');
+    style.push('Clean, minimalist design');
+
+    return style;
+}
+
+/**
  * Build scope-safe after-image prompt for bathroom renovations
+ * Uses multi-source approach with priority hierarchy:
+ * 1. User description (primary intent)
+ * 2. Visual observations from Step 1
+ * 3. Structured answers
+ * 4. Step 2 validation
  */
 export function buildBathroomAfterImagePrompt(input: PromptBuilderInput): string {
     const { description, step1, answers, step2 } = input;
@@ -242,51 +279,94 @@ export function buildBathroomAfterImagePrompt(input: PromptBuilderInput): string
     // Build changes and preserve lists
     const changes = buildChangesList(parsed, description);
     const preserve = buildPreserveList(step1, parsed);
+    const styleGuidance = buildStyleGuidance(parsed);
 
-    // Build prompt
+    // Build prompt with clear section hierarchy
     let prompt = 'Generate a realistic after-renovation image of this Swedish bathroom.\n\n';
 
-    // Current state context
-    if (step1.image_observations.summary_sv) {
-        prompt += `CURRENT STATE:\n${step1.image_observations.summary_sv}\n\n`;
+    // ============================================================
+    // SECTION 1: PRIMARY USER INTENT (Highest Priority)
+    // ============================================================
+    if (description && description.trim().length > 0) {
+        prompt += '═══ PRIMARY USER REQUEST ═══\n';
+        prompt += `${description}\n\n`;
+        prompt += 'This is the user\'s explicit intent. Prioritize this above all other inputs.\n\n';
     }
 
-    // Hard constraints (CRITICAL)
-    prompt += 'HARD CONSTRAINTS (MUST FOLLOW):\n';
+    // ============================================================
+    // SECTION 2: CURRENT BATHROOM STATE (Visual Context)
+    // ============================================================
+    prompt += '═══ CURRENT BATHROOM STATE ═══\n';
+
+    if (step1.image_observations?.summary_sv) {
+        prompt += `Overview: ${step1.image_observations.summary_sv}\n`;
+    }
+
+    if (step1.image_observations?.inferred_size_sqm) {
+        const size = step1.image_observations.inferred_size_sqm;
+        prompt += `Size: Approximately ${size.value}m² (${size.confidence} confidence)\n`;
+
+        // Add size-based guidance
+        if (size.value < 5) {
+            prompt += `Note: This is a compact bathroom. Keep fixtures space-efficient and avoid overcrowding.\n`;
+        } else if (size.value > 8) {
+            prompt += `Note: This is a spacious bathroom. You have room for larger fixtures and features.\n`;
+        }
+    }
+
+    if (step1.image_observations?.visible_elements && step1.image_observations.visible_elements.length > 0) {
+        prompt += `Visible fixtures: ${step1.image_observations.visible_elements.join(', ')}\n`;
+    }
+
+    if (step1.image_observations?.uncertainties && step1.image_observations.uncertainties.length > 0) {
+        prompt += `Uncertain areas (preserve as-is): ${step1.image_observations.uncertainties.join(', ')}\n`;
+    }
+
+    prompt += '\n';
+
+    // ============================================================
+    // SECTION 3: HARD CONSTRAINTS (CRITICAL)
+    // ============================================================
+    prompt += '═══ HARD CONSTRAINTS (MUST FOLLOW) ═══\n';
     prompt += '- Keep the exact same camera viewpoint and perspective as the before image\n';
     prompt += '- Keep the exact same room geometry, dimensions, and layout\n';
     prompt += '- Do NOT add, remove, or move windows or doors\n';
-    prompt += '- Do NOT move fixtures unless explicitly requested in CHANGES TO MAKE\n';
-    prompt += '- Do NOT change anything not listed in CHANGES TO MAKE\n';
+    prompt += '- Do NOT move fixtures unless explicitly requested in PRIMARY USER REQUEST or CHANGES TO MAKE\n';
+    prompt += '- Do NOT change anything not listed in PRIMARY USER REQUEST or CHANGES TO MAKE\n';
     prompt += '- Do NOT hallucinate new features or upgrades\n';
-    prompt += '- If uncertain about a detail, preserve what is visible in the before image\n\n';
+    prompt += '- If uncertain about a detail, preserve what is visible in the before image\n';
+    prompt += '- Respect the size constraints mentioned in CURRENT BATHROOM STATE\n\n';
 
-    // Changes to make
+    // ============================================================
+    // SECTION 4: CHANGES TO MAKE (From Answers + Description)
+    // ============================================================
     if (changes.length > 0) {
-        prompt += 'CHANGES TO MAKE:\n';
+        prompt += '═══ CHANGES TO MAKE ═══\n';
         changes.forEach(change => {
             prompt += `- ${change}\n`;
         });
         prompt += '\n';
     } else {
-        prompt += 'CHANGES TO MAKE:\n';
+        prompt += '═══ CHANGES TO MAKE ═══\n';
         prompt += '- Refresh the bathroom with modern Swedish design while keeping everything else the same\n\n';
     }
 
-    // Preserve unchanged
-    prompt += 'PRESERVE UNCHANGED:\n';
+    // ============================================================
+    // SECTION 5: PRESERVE UNCHANGED
+    // ============================================================
+    prompt += '═══ PRESERVE UNCHANGED ═══\n';
     preserve.forEach(item => {
         prompt += `- ${item}\n`;
     });
     prompt += '\n';
 
-    // Style guidance
-    prompt += 'STYLE:\n';
-    prompt += '- Modern Swedish bathroom aesthetic\n';
-    prompt += '- High-quality finishes and materials\n';
-    prompt += '- Proper lighting (natural and artificial)\n';
-    prompt += '- Realistic textures and reflections\n';
-    prompt += '- Clean, minimalist design\n';
+    // ============================================================
+    // SECTION 6: STYLE GUIDANCE (Adaptive)
+    // ============================================================
+    prompt += '═══ STYLE GUIDANCE ═══\n';
+    styleGuidance.forEach(guideline => {
+        prompt += `- ${guideline}\n`;
+    });
 
     return prompt;
 }

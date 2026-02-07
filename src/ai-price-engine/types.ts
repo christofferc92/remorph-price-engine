@@ -43,6 +43,7 @@ export interface ScopeGuess {
 }
 
 export interface AnalysisResponse {
+    user_description: string;  // Preserve original user input for downstream use
     inferred_project_type: string;
     image_observations?: ImageObservations;
     scope_guess?: ScopeGuess;

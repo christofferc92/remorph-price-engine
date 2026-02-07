@@ -94,7 +94,8 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
             })
         };
 
-        res.json({ ...analysis, debug_cost, request_id: requestId });
+        // Include user_description in response so it's available for Step 2
+        res.json({ ...analysis, user_description: description, debug_cost, request_id: requestId });
     } catch (error: any) {
         if (error instanceof AiAnalysisError) {
             console.error(`[AI-Offert] Analyze model error [${requestId}] stage=${error.stage}:`, error.message);
@@ -133,11 +134,10 @@ router.post('/generate', async (req, res) => {
 
 
         // Call AI Price Engine Step 2 (V2) - pass user description for scope detection
-        const userDescription = (step1 as any).user_description || '';
         const { data: estimate, usageMetadata } = await generateOffertunderlagV2(
             step1 as AnalysisResponse,
             answers,
-            userDescription
+            step1.user_description  // Now properly typed and available
         );
 
         // Save to FS Store (Mock persistence)

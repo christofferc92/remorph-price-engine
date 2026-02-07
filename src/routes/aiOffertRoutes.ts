@@ -95,6 +95,7 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
         };
 
         // Include user_description in response so it's available for Step 2
+        console.log(`[AI-Offert] [${requestId}] ANALYZE returning user_description: "${description}"`);
         res.json({ ...analysis, user_description: description, debug_cost, request_id: requestId });
     } catch (error: any) {
         if (error instanceof AiAnalysisError) {
@@ -134,6 +135,7 @@ router.post('/generate', async (req, res) => {
 
 
         // Call AI Price Engine Step 2 (V2) - pass user description for scope detection
+        console.log(`[AI-Offert] [${requestId}] GENERATE received user_description: "${step1.user_description}"`);
         const { data: estimate, usageMetadata } = await generateOffertunderlagV2(
             step1 as AnalysisResponse,
             answers,

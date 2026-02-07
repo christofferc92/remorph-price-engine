@@ -131,8 +131,14 @@ router.post('/generate', async (req, res) => {
             return sendError(res, 400, 'Missing required fields: step1, answers');
         }
 
-        // Call AI Price Engine Step 2 (V2)
-        const { data: estimate, usageMetadata } = await generateOffertunderlagV2(step1 as AnalysisResponse, answers);
+
+        // Call AI Price Engine Step 2 (V2) - pass user description for scope detection
+        const userDescription = (step1 as any).user_description || '';
+        const { data: estimate, usageMetadata } = await generateOffertunderlagV2(
+            step1 as AnalysisResponse,
+            answers,
+            userDescription
+        );
 
         // Save to FS Store (Mock persistence)
         await saveEstimate(estimate);

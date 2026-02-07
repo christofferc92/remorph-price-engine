@@ -99,7 +99,8 @@ export async function generateOffertunderlag(
 
 export async function generateOffertunderlagV2(
     step1: AnalysisResponse,
-    answers: Record<string, any>
+    answers: Record<string, any>,
+    userDescription?: string
 ): Promise<{ data: EstimateResponseV2; usageMetadata: any }> {
     const genAI = getGenAIClient();
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
@@ -109,7 +110,8 @@ export async function generateOffertunderlagV2(
     const prompt = buildStep2PromptV2(
         step1.image_observations,
         step1.scope_guess,
-        normalizedAnswers
+        normalizedAnswers,
+        userDescription
     );
 
     try {

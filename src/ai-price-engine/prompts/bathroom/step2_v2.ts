@@ -5,17 +5,30 @@ import { AnalysisResponse, ImageObservations, ScopeGuess } from '../../types';
  */
 
 export function buildStep2PromptV2(
-    imageObservations: ImageObservations,
-    scopeGuess: ScopeGuess,
-    normalizedAnswers: Record<string, any>
+  imageObservations: ImageObservations,
+  scopeGuess: ScopeGuess,
+  normalizedAnswers: Record<string, any>,
+  userDescription?: string
 ): string {
-    return `You are a Swedish professional calculator for bathroom renovations. Generate a detailed, contractor-grade cost estimate ("kalkyl") with granular line items.
+  // Analyze user description for scope constraints
+  let scopeGuidance = '';
+  if (userDescription) {
+    const lower = userDescription.toLowerCase();
+    if (lower.match(/\b(bara|endast|only|just)\s+(golv|floor|byta\s+golv)/)) {
+      scopeGuidance = `\nCRITICAL SCOPE CONSTRAINT: User explicitly wants FLOOR-ONLY renovation ("${userDescription}").\n- Include ONLY: floor demolition, floor preparation, floor waterproofing, floor finish, floor drain work.\n- EXCLUDE: wall tiles, wall waterproofing, fixture replacements, ceiling work, painting, electrical.\n- If fixtures need temporary removal for floor work, include "remove and reinstall" but NOT replacement.\n`;
+    } else if (lower.match(/\b(golv|floor)\b/) && !lower.match(/\b(vägg|wall|kakel|tile|toalett|toilet|dusch|shower|badkar|bath)/)) {
+      scopeGuidance = `\nSCOPE CONSTRAINT: User description mentions only floor ("${userDescription}").\n- Focus primarily on floor-related work.\n- Only include other work if explicitly mentioned or absolutely necessary for floor renovation.\n`;
+    }
+  }
+
+  return `You are a Swedish professional calculator for bathroom renovations. Generate a detailed, contractor-grade cost estimate ("kalkyl") with granular line items.
 
 INPUT DATA:
+- User Description: "${userDescription || 'Not provided'}"
 - Image Analysis: ${JSON.stringify(imageObservations, null, 2)}
 - Scope Estimate: ${JSON.stringify(scopeGuess, null, 2)}
 - User Answers: ${JSON.stringify(normalizedAnswers, null, 2)}
-
+${scopeGuidance}
 REQUIREMENTS:
 1. Break down costs into SECTIONS: "Rivning", "Bygg & Ytskikt", "VVS & Rör", "El", "Inredning & Montering", "Övrigt".
 2. For each section, list specific LINE ITEMS (e.g., "Rivning plastmatta", "Flytspackling", "Kakel vägg", "Installation WC").

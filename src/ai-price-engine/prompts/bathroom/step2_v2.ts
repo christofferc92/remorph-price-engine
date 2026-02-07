@@ -14,10 +14,23 @@ export function buildStep2PromptV2(
   let scopeGuidance = '';
   if (userDescription) {
     const lower = userDescription.toLowerCase();
-    if (lower.match(/\b(bara|endast|only|just)\s+(golv|floor|byta\s+golv)/)) {
+
+    // Detect floor-only intent with multiple patterns
+    const floorOnlyPatterns = [
+      /\b(bara|endast|only|just)\s+(golv|floor|byta\s+golv)/,  // "bara golv", "only floor"
+      /\b(byt|byta|change|replace)\s+(golv|flooring|floor)\s+(till|to)/,  // "byt golv till", "change flooring to"
+      /\b(nytt|ny|new)\s+(golv|floor|flooring)/,  // "nytt golv"
+      /\b(golv|floor|flooring)\s+(till|to)\s+\w+/,  // "golv till microcement"
+    ];
+
+    const hasFloorKeyword = lower.match(/\b(golv|floor|flooring|microcement|klinker|vinyl|parkett)\b/);
+    const hasNonFloorKeyword = lower.match(/\b(vägg|wall|kakel|tile|toalett|toilet|dusch|shower|badkar|bath|handfat|sink|kran|faucet|armatur|fixture)\b/);
+
+    const isFloorOnly = floorOnlyPatterns.some(pattern => lower.match(pattern)) ||
+      (hasFloorKeyword && !hasNonFloorKeyword);
+
+    if (isFloorOnly) {
       scopeGuidance = `\nCRITICAL SCOPE CONSTRAINT: User explicitly wants FLOOR-ONLY renovation ("${userDescription}").\n- Include ONLY: floor demolition, floor preparation, floor waterproofing, floor finish, floor drain work.\n- EXCLUDE: wall tiles, wall waterproofing, fixture replacements, ceiling work, painting, electrical.\n- If fixtures need temporary removal for floor work, include "remove and reinstall" but NOT replacement.\n`;
-    } else if (lower.match(/\b(golv|floor)\b/) && !lower.match(/\b(vägg|wall|kakel|tile|toalett|toilet|dusch|shower|badkar|bath)/)) {
-      scopeGuidance = `\nSCOPE CONSTRAINT: User description mentions only floor ("${userDescription}").\n- Focus primarily on floor-related work.\n- Only include other work if explicitly mentioned or absolutely necessary for floor renovation.\n`;
     }
   }
 

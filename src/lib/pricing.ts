@@ -21,21 +21,17 @@ const ROT_CAP_PER_PERSON = 50000;
 function computeLineTotals(item: LineItemV2): LineItemV2 {
     // Capture baseline if missing (First Run)
     const original_qty = item.original_qty ?? item.qty;
-    const original_unit_price = item.original_unit_price ?? item.unit_price_sek_incl_vat;
+    const original_unit_price = item.original_unit_price ?? item.unit_price_incl_vat;
 
-    const likely = Math.round(item.qty * item.unit_price_sek_incl_vat);
+    const likely = Math.round(item.qty * item.unit_price_incl_vat);
 
     // Fallback uncertainty if not provided (e.g. from simplistic AI output)
     // If item has valid ranges, keep them. Otherwise, apply +/- 10% default.
-    // We check if "total_low_sek_incl_vat" is 0 or missing (if it was optional, but it's required in V2).
-    // We assume the caller (AI parser or Repricer) might pass incomplete items, so we ensure safety.
 
-    let low = item.total_low_sek_incl_vat;
-    let high = item.total_high_sek_incl_vat;
+    let low = item.total_low_incl_vat;
+    let high = item.total_high_incl_vat;
 
-    // If ranges are seemingly invalid (low > likely or high < likely), we might reset them?
-    // Or if they are equal to likely (no spread), we keep them.
-    // If they are 0, we imply they need calculation.
+    // If ranges are seemingly invalid or missing, apply +/- 10% default
     if (!low && !high) {
         low = Math.round(likely * 0.90);
         high = Math.round(likely * 1.10);
@@ -43,9 +39,9 @@ function computeLineTotals(item: LineItemV2): LineItemV2 {
 
     return {
         ...item,
-        total_likely_sek_incl_vat: likely,
-        total_low_sek_incl_vat: low,
-        total_high_sek_incl_vat: high,
+        total_likely_incl_vat: likely,
+        total_low_incl_vat: low,
+        total_high_incl_vat: high,
         original_qty,
         original_unit_price
     };
@@ -81,12 +77,12 @@ export function calculateEstimate(
     // 2. Iterate to sum totals and variance
     for (const section of processedSections) {
         for (const item of section.items) {
-            const likely = item.total_likely_sek_incl_vat;
+            const likely = item.total_likely_incl_vat;
             totalLikely += likely;
 
             // RSS Variance
-            const dLow = Math.max(0, likely - item.total_low_sek_incl_vat);
-            const dHigh = Math.max(0, item.total_high_sek_incl_vat - likely);
+            const dLow = Math.max(0, likely - item.total_low_incl_vat);
+            const dHigh = Math.max(0, item.total_high_incl_vat - likely);
             sumSqDiffLow += (dLow * dLow);
             sumSqDiffHigh += (dHigh * dHigh);
 
@@ -99,7 +95,7 @@ export function calculateEstimate(
             } else if (item.type === 'material') {
                 aggMaterialIncl += likely;
             } else if (item.type === 'mixed') {
-                const share = item.labor_share_percent ?? 0;
+                const share = item.labor_share ?? 0;  // 0-1 range, not percentage
                 const laborPart = likely * share;
                 const materialPart = likely - laborPart;
 

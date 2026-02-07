@@ -141,16 +141,16 @@ export interface LineItemV2 {
     // Explicit inputs
     qty: number;
     unit: UnitType;
-    unit_price_sek_incl_vat: number;
+    unit_price_incl_vat: number;
 
     type: ItemType;
-    labor_share_percent?: number; // 0..1, required if type === 'mixed'
+    labor_share?: number; // 0..1, required if type === 'mixed'
     is_rot_eligible: boolean;
 
     // Calculated (Always present, Incl VAT)
-    total_likely_sek_incl_vat: number;
-    total_low_sek_incl_vat: number;
-    total_high_sek_incl_vat: number;
+    total_likely_incl_vat: number;
+    total_low_incl_vat: number;
+    total_high_incl_vat: number;
 
     // Override Metadata
     manual_override?: boolean;

@@ -12,8 +12,13 @@ export function buildStep2PromptV2(
 ): string {
   // Analyze user description for scope constraints
   let scopeGuidance = '';
+
+  // DEBUG: Log what we receive
+  console.log('[SCOPE-DEBUG] userDescription:', userDescription);
+
   if (userDescription) {
     const lower = userDescription.toLowerCase();
+    console.log('[SCOPE-DEBUG] lowercase:', lower);
 
     // Detect floor-only intent with multiple patterns
     const floorOnlyPatterns = [
@@ -26,12 +31,22 @@ export function buildStep2PromptV2(
     const hasFloorKeyword = lower.match(/\b(golv|floor|flooring|microcement|klinker|vinyl|parkett)\b/);
     const hasNonFloorKeyword = lower.match(/\b(vägg|wall|kakel|tile|toalett|toilet|dusch|shower|badkar|bath|handfat|sink|kran|faucet|armatur|fixture)\b/);
 
+    console.log('[SCOPE-DEBUG] hasFloorKeyword:', !!hasFloorKeyword);
+    console.log('[SCOPE-DEBUG] hasNonFloorKeyword:', !!hasNonFloorKeyword);
+
     const isFloorOnly = floorOnlyPatterns.some(pattern => lower.match(pattern)) ||
       (hasFloorKeyword && !hasNonFloorKeyword);
 
+    console.log('[SCOPE-DEBUG] isFloorOnly:', isFloorOnly);
+
     if (isFloorOnly) {
       scopeGuidance = `\nCRITICAL SCOPE CONSTRAINT: User explicitly wants FLOOR-ONLY renovation ("${userDescription}").\n- Include ONLY: floor demolition, floor preparation, floor waterproofing, floor finish, floor drain work.\n- EXCLUDE: wall tiles, wall waterproofing, fixture replacements, ceiling work, painting, electrical.\n- If fixtures need temporary removal for floor work, include "remove and reinstall" but NOT replacement.\n`;
+      console.log('[SCOPE-DEBUG] Applied FLOOR-ONLY constraint');
+    } else {
+      console.log('[SCOPE-DEBUG] No scope constraint applied');
     }
+  } else {
+    console.log('[SCOPE-DEBUG] userDescription is empty/undefined');
   }
 
   return `You are a Swedish professional calculator for bathroom renovations. Generate a detailed, contractor-grade cost estimate ("kalkyl") with granular line items.

@@ -59,6 +59,8 @@ OUTPUT FORMAT (JSON ONLY):
 {
   "scope_description_sv": "Detailed text summary...",
   "assumptions_sv": ["assumption 1...", "assumption 2..."],
+  "overall_confidence": "low" | "medium" | "high",
+  "confidence_notes_sv": ["reason for uncertainty 1...", "reason for uncertainty 2..."],
   "sections": [
     {
       "id": "section_rivning", // or unique key
@@ -74,12 +76,20 @@ OUTPUT FORMAT (JSON ONLY):
           "total_low_incl_vat": 3500,
           "total_high_incl_vat": 5500,
           "type": "labor",
-          "is_rot_eligible": true
+          "is_rot_eligible": true,
+          "price_confidence": "medium",
+          "quantity_confidence": "high"
         }
       ]
     }
   ]
 }
+
+CONFIDENCE SCORING:
+- price_confidence: "high" if standard market rate, "medium" if regional variation, "low" if specialized/rare work
+- quantity_confidence: "high" if visible in image, "medium" if inferred from size, "low" if guessed
+- overall_confidence: "high" if all items high confidence, "medium" if some uncertainty, "low" if significant unknowns
+- confidence_notes_sv: List specific reasons for low/medium confidence (e.g., "Badrummets exakta storlek oklar", "Specialmaterial microcement - prisvariation stor")
 
 PRICING RULES (Sweden 2026):
 - Labor: ~650-850 SEK/h incl VAT.

@@ -152,6 +152,10 @@ export interface LineItemV2 {
     total_low_incl_vat: number;
     total_high_incl_vat: number;
 
+    // Confidence scoring (optional, from AI)
+    price_confidence?: 'low' | 'medium' | 'high';  // How certain is the AI about this price?
+    quantity_confidence?: 'low' | 'medium' | 'high';  // How certain is the AI about this quantity?
+
     // Override Metadata
     manual_override?: boolean;
 
@@ -200,6 +204,10 @@ export interface EstimateResponseV2 {
     // Context
     scope_summary_sv: string;
     assumptions_sv: string[];
+
+    // Overall estimate confidence (optional)
+    overall_confidence?: 'low' | 'medium' | 'high';
+    confidence_notes_sv?: string[];  // Reasons for low confidence
 }
 
 export interface RepriceRequestV2 {

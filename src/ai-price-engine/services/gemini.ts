@@ -131,7 +131,7 @@ export async function analyzeBathroomImage(
 
         // Adaptive question count validation (with tolerance)
         const { analyzeDescription } = await import('../lib/descriptionAnalyzer');
-        const expectedCount = analyzeDescription(description).suggested_question_count;
+        const expectedCount = analyzeDescription(userDescription).suggested_question_count;
         const actualCount = analysis.follow_up_questions.length;
         const tolerance = 2;
 

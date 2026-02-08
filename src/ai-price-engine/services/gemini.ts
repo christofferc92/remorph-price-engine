@@ -73,10 +73,16 @@ export async function analyzeBathroomImage(
 
     const genAI = getGenAIClient();
     const modelName = 'gemini-2.0-flash';
+
+    // Import schema based on retry mode
+    const { step1ResponseSchema, step1ResponseSchemaSimplified } = await import('../schemas/step1Schema');
+    const schema = isRetry ? step1ResponseSchemaSimplified : step1ResponseSchema;
+
     const model = genAI.getGenerativeModel({
         model: modelName,
         generationConfig: {
             responseMimeType: "application/json",
+            responseSchema: schema,
             maxOutputTokens: 4096,
         }
     });

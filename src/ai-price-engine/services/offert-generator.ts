@@ -1,7 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AnalysisResponse, OffertResponse } from '../types';
-import { buildStep2Prompt } from '../prompts/bathroom/step2';
-import { buildStep2PromptV2 } from '../prompts/bathroom/step2_v2';
 import { calculateEstimate } from '../../lib/pricing';
 import { EstimateResponseV2 } from '../types';
 
@@ -63,12 +61,26 @@ export async function generateOffertunderlag(
     // Normalize answers using maps_to keys
     const normalizedAnswers = normalizeAnswers(step1, answers);
 
-    // Build prompt using bathroom-specific prompt builder
-    const prompt = buildStep2Prompt(
-        step1.image_observations,
-        step1.scope_guess,
-        normalizedAnswers
-    );
+    // Route to appropriate Step 2 prompt based on project type
+    let prompt: string;
+    const projectType = step1.inferred_project_type;
+
+    if (projectType === 'kitchen') {
+        const { buildStep2PromptV2 } = await import('../prompts/kitchen/step2_v2');
+        prompt = buildStep2PromptV2(
+            step1.image_observations!,
+            step1.scope_guess!,
+            normalizedAnswers
+        );
+    } else {
+        // Default to bathroom
+        const { buildStep2Prompt } = await import('../prompts/bathroom/step2');
+        prompt = buildStep2Prompt(
+            step1.image_observations!,
+            step1.scope_guess!,
+            normalizedAnswers
+        );
+    }
 
     try {
         const result = await model.generateContent(prompt);
@@ -107,12 +119,28 @@ export async function generateOffertunderlagV2(
 
     const normalizedAnswers = normalizeAnswers(step1, answers);
 
-    const prompt = buildStep2PromptV2(
-        step1.image_observations,
-        step1.scope_guess,
-        normalizedAnswers,
-        userDescription
-    );
+    // Route to appropriate Step 2 V2 prompt based on project type
+    let prompt: string;
+    const projectType = step1.inferred_project_type;
+
+    if (projectType === 'kitchen') {
+        const { buildStep2PromptV2 } = await import('../prompts/kitchen/step2_v2');
+        prompt = buildStep2PromptV2(
+            step1.image_observations!,
+            step1.scope_guess!,
+            normalizedAnswers,
+            userDescription
+        );
+    } else {
+        // Default to bathroom
+        const { buildStep2PromptV2 } = await import('../prompts/bathroom/step2_v2');
+        prompt = buildStep2PromptV2(
+            step1.image_observations!,
+            step1.scope_guess!,
+            normalizedAnswers,
+            userDescription
+        );
+    }
 
     try {
         const result = await model.generateContent(prompt);

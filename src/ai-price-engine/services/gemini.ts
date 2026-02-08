@@ -1,7 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import sharp from 'sharp';
 import { AnalysisResponse } from '../types';
-import { buildStep1Prompt } from '../prompts/bathroom/step1';
 
 // Validate API key exists at runtime, but don't load dotenv here (environment's responsibility)
 function getGenAIClient() {
@@ -85,9 +84,22 @@ export async function analyzeBathroomImage(
     // Convert optimized image to base64
     const base64Image = optimizedBuffer.toString('base64');
 
-    // Build prompt using bathroom-specific prompt builder
-    // Retry uses simplified contract
-    const prompt = buildStep1Prompt(userDescription, isRetry);
+    // Detect room type from description
+    const { detectRoomType } = await import('../lib/roomTypeDetector');
+    const roomDetection = detectRoomType(userDescription);
+
+    // Route to appropriate prompt builder based on room type
+    let prompt: string;
+    if (roomDetection.room_type === 'kitchen') {
+        const { buildStep1Prompt: buildKitchenStep1 } = await import('../prompts/kitchen/step1');
+        prompt = buildKitchenStep1(userDescription, isRetry);
+    } else {
+        // Default to bathroom (includes 'unclear' cases for backward compatibility)
+        const { buildStep1Prompt: buildBathroomStep1 } = await import('../prompts/bathroom/step1');
+        prompt = buildBathroomStep1(userDescription, isRetry);
+    }
+
+    console.log(`[PERF_AI_ANALYZE] [${requestId}] room_type=${roomDetection.room_type} confidence=${roomDetection.confidence}`);
 
     try {
         // 2. Generate content with optimized image and constraints

@@ -83,7 +83,7 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
                 console.log(`[AI-Offert] [${requestId}] Attempt 1 failed (stage=${error.stage}). Retrying with simplified contract...`);
                 try {
                     // Attempt 2 (Retry)
-                    const result = await analyzeBathroomImage(imageBuffer, description, requestId, { isRetry: true });
+                    const result = await analyzeBathroomImage(imageBuffer, userDescription, requestId, { isRetry: true });
                     analysis = result.data;
                     usage = result.usageMetadata;
                 } catch (retryError: any) {

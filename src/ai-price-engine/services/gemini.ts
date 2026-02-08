@@ -129,6 +129,22 @@ export async function analyzeBathroomImage(
             throw new AiAnalysisError('Gemini output missing follow_up_questions', 'schema_validate', rawOutput);
         }
 
+        // Adaptive question count validation (with tolerance)
+        const { analyzeDescription } = await import('../lib/descriptionAnalyzer');
+        const expectedCount = analyzeDescription(description).suggested_question_count;
+        const actualCount = analysis.follow_up_questions.length;
+        const tolerance = 2;
+
+        if (actualCount < expectedCount - tolerance) {
+            console.warn(`[PERF_AI_ANALYZE] [${requestId}] question_count_low expected=${expectedCount} actual=${actualCount}`);
+            // Don't fail - AI might have good reasons for fewer questions
+        } else if (actualCount > expectedCount + tolerance) {
+            console.warn(`[PERF_AI_ANALYZE] [${requestId}] question_count_high expected=${expectedCount} actual=${actualCount}`);
+            // Don't fail - AI might have good reasons for more questions
+        } else {
+            console.log(`[PERF_AI_ANALYZE] [${requestId}] question_count_ok expected=${expectedCount} actual=${actualCount}`);
+        }
+
         console.log(`[PERF_AI_ANALYZE] [${requestId}] attempt=${attempt}/2 status=success output_len=${output_len}`);
 
         return {

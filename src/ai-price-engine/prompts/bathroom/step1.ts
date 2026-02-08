@@ -10,6 +10,8 @@ export function buildStep1Prompt(userDescription: string, simplified: boolean = 
   // Analyze user description for intent and preferences
   const analysis = analyzeDescription(userDescription);
   const contextInstructions = buildContextInstructions(analysis);
+  const questionCount = analysis.suggested_question_count;
+
   const schema = simplified
     ? `{
   "inferred_project_type": "bathroom",
@@ -27,7 +29,7 @@ export function buildStep1Prompt(userDescription: string, simplified: boolean = 
       "prefill_confidence": null,
       "prefill_basis_sv": null
     }
-    ... EXACTLY 10 total questions ...
+    ... EXACTLY ${questionCount} total questions ...
   ]
 }`
     : `{
@@ -61,7 +63,7 @@ export function buildStep1Prompt(userDescription: string, simplified: boolean = 
       "prefill_confidence": "low" | "medium" | "high" | null,
       "prefill_basis_sv": "Why I guessed this from the image" | null
     }
-    ... EXACTLY 10 total questions ...
+    ... EXACTLY ${questionCount} total questions ...
   ]
 }`;
 
@@ -69,11 +71,16 @@ export function buildStep1Prompt(userDescription: string, simplified: boolean = 
     ? "\nSTRICT RULE: Be extremely concise. Max 10 words per text field. No long explanations. Swedish language."
     : "";
 
-  return `You are an assistant for Swedish renovation estimating. Your job in STEP 1 is to analyze the provided image and the user's text description and generate EXACTLY 10 follow-up questions needed to produce a contractor-usable "offertunderlag" and an initial price range estimate in SEK (kr) later.
+  return `You are an assistant for Swedish renovation estimating. Your job in STEP 1 is to analyze the provided image and the user's text description and generate EXACTLY ${questionCount} follow-up questions needed to produce a contractor-usable "offertunderlag" and an initial price range estimate in SEK (kr) later.
 ${retryInstructions}
 
 USER'S DESCRIPTION: "${userDescription}"
 ${contextInstructions}
+
+QUESTION COUNT RULES:
+- Floor-only scope (5-7 questions): Focus on floor material, bathroom size, underfloor heating, current flooring, access constraints
+- Partial renovation (8-10 questions): Identify scope boundaries (what to renovate vs preserve), plus key details for selected areas
+- Full bathroom (11-15 questions): Comprehensive coverage of floor, walls, ceiling, fixtures, plumbing, electrical, ventilation
 
 Key principles:
 - Focus on questions that materially affect cost, scope, time, risk, and trade requirements in Sweden.
@@ -98,23 +105,11 @@ Bathroom-specific focus (for now):
 PREFILL/CONFIRM FLOW:
 - For questions where you CAN infer an answer from the image:
   - Set ask_mode="confirm"
-  - Provide prefill_guess with your best guess
-  - Provide prefill_confidence (low/medium/high)
-  - Provide prefill_basis_sv explaining why you guessed this from the image
-- For questions you CANNOT infer from the image:
+  - Provide prefill_guess with your best estimate
+  - Set prefill_confidence based on how certain you are
+  - Explain your reasoning in prefill_basis_sv
+- For questions where you CANNOT infer from the image:
   - Set ask_mode="ask"
-  - Do NOT provide prefill_guess, prefill_confidence, or prefill_basis_sv
-  - Include "Vet ej" option where relevant
-
-GOOD CANDIDATES FOR PREFILL (ask_mode="confirm"):
-- Existing floor surface type (plastmatta, klinker, trägolv, etc.) - if visible in image
-- Bathroom size estimate in m² - based on visible fixtures and proportions
-- Visible fixtures that affect scope
-
-NEVER PREFILL (always ask_mode="ask"):
-- Waterproofing compliance or tätskikt condition (hidden)
-- Renovation age or compliance details (unknown)
-- Hidden substrate (wood vs concrete under floor)
 - Drain condition or placement (unless clearly visible)
 - Electrical scope
 - Waste disposal responsibility

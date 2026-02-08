@@ -30,14 +30,35 @@ export function analyzeDescription(description: string): DescriptionAnalysis {
     // Detect primary intent
     if (lower.match(/\b(bara|endast|only|just)\s+(golv|floor|byta\s+golv)/)) {
         analysis.primary_intent = 'floor_only';
-        analysis.suggested_question_count = 6;
+        // Base: 5 questions for simple floor-only
+        let count = 5;
+
+        // +1 if underfloor heating mentioned or likely needed
+        if (lower.match(/golvvärme|underfloor|värme/)) count++;
+
+        // +1 if complex/specialized material
+        if (lower.match(/microcement|epoxy|terrazzo|natursten/)) count++;
+
+        analysis.suggested_question_count = Math.min(count, 7);
     } else if (lower.match(/\b(golv|floor)\b/) && !lower.match(/\b(vägg|wall|kakel|tile|toalett|toilet|dusch|shower|badkar|bath)/)) {
         // If only mentions floor and nothing else
         analysis.primary_intent = 'floor_only';
         analysis.suggested_question_count = 6;
     } else if (lower.match(/\b(total|komplett|full|helt|complete)/)) {
         analysis.primary_intent = 'full';
-        analysis.suggested_question_count = 12;
+        // Base: 11 questions for full renovation
+        let count = 11;
+
+        // +1 if layout changes mentioned
+        if (lower.match(/flytta|move|ändra layout|layout change/)) count++;
+
+        // +1 if accessibility mentioned
+        if (lower.match(/tillgänglighet|accessible|rullstol|wheelchair/)) count++;
+
+        // +1 if premium materials mentioned
+        if (lower.match(/premium|lyx|exklusiv|marmor|marble/)) count++;
+
+        analysis.suggested_question_count = Math.min(count, 15);
     } else if (lower.match(/\b(delvis|partial|vissa|byt.*och)/)) {
         analysis.primary_intent = 'partial';
         analysis.suggested_question_count = 10;

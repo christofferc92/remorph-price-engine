@@ -3,65 +3,67 @@
  * Used to enforce structured output from Gemini
  */
 
+import { SchemaType } from '@google/generative-ai';
+
 export const step1ResponseSchema = {
-    type: "object",
+    type: SchemaType.OBJECT,
     properties: {
         inferred_project_type: {
-            type: "string",
+            type: SchemaType.STRING,
             enum: ["bathroom", "kitchen", "bedroom", "living_room", "painting", "flooring", "unclear"]
         },
         image_observations: {
-            type: "object",
+            type: SchemaType.OBJECT,
             properties: {
-                summary_sv: { type: "string" },
+                summary_sv: { type: SchemaType.STRING },
                 inferred_size_sqm: {
-                    type: "object",
+                    type: SchemaType.OBJECT,
                     properties: {
-                        value: { type: "number" },
-                        confidence: { type: "string", enum: ["low", "medium", "high"] },
-                        basis_sv: { type: "string" }
+                        value: { type: SchemaType.NUMBER },
+                        confidence: { type: SchemaType.STRING, enum: ["low", "medium", "high"] },
+                        basis_sv: { type: SchemaType.STRING }
                     },
                     required: ["value", "confidence", "basis_sv"]
                 },
                 visible_elements: {
-                    type: "array",
-                    items: { type: "string" }
+                    type: SchemaType.ARRAY,
+                    items: { type: SchemaType.STRING }
                 },
                 uncertainties: {
-                    type: "array",
-                    items: { type: "string" }
+                    type: SchemaType.ARRAY,
+                    items: { type: SchemaType.STRING }
                 }
             },
             required: ["summary_sv", "visible_elements"]
         },
         scope_guess: {
-            type: "object",
+            type: SchemaType.OBJECT,
             properties: {
-                value: { type: "string" },
-                confidence: { type: "string", enum: ["low", "medium", "high"] },
-                basis_sv: { type: "string" }
+                value: { type: SchemaType.STRING },
+                confidence: { type: SchemaType.STRING, enum: ["low", "medium", "high"] },
+                basis_sv: { type: SchemaType.STRING }
             },
             required: ["value", "confidence", "basis_sv"]
         },
         follow_up_questions: {
-            type: "array",
+            type: SchemaType.ARRAY,
             items: {
-                type: "object",
+                type: SchemaType.OBJECT,
                 properties: {
-                    id: { type: "string" },
-                    priority: { type: "integer" },
-                    question_sv: { type: "string" },
-                    type: { type: "string", enum: ["yes_no", "single_choice", "text", "number"] },
+                    id: { type: SchemaType.STRING },
+                    priority: { type: SchemaType.INTEGER },
+                    question_sv: { type: SchemaType.STRING },
+                    type: { type: SchemaType.STRING, enum: ["yes_no", "single_choice", "text", "number"] },
                     options: {
-                        type: "array",
-                        items: { type: "string" }
+                        type: SchemaType.ARRAY,
+                        items: { type: SchemaType.STRING }
                     },
-                    maps_to: { type: "string" },
-                    why_it_matters_sv: { type: "string" },
-                    ask_mode: { type: "string", enum: ["ask", "confirm"] },
-                    prefill_guess: { type: ["string", "number", "null"] },
-                    prefill_confidence: { type: ["string", "null"], enum: ["low", "medium", "high", null] },
-                    prefill_basis_sv: { type: ["string", "null"] }
+                    maps_to: { type: SchemaType.STRING },
+                    why_it_matters_sv: { type: SchemaType.STRING },
+                    ask_mode: { type: SchemaType.STRING, enum: ["ask", "confirm"] },
+                    prefill_guess: { type: SchemaType.STRING, nullable: true },
+                    prefill_confidence: { type: SchemaType.STRING, enum: ["low", "medium", "high"], nullable: true },
+                    prefill_basis_sv: { type: SchemaType.STRING, nullable: true }
                 },
                 required: ["id", "priority", "question_sv", "type", "maps_to", "why_it_matters_sv", "ask_mode"]
             }
@@ -71,31 +73,31 @@ export const step1ResponseSchema = {
 };
 
 export const step1ResponseSchemaSimplified = {
-    type: "object",
+    type: SchemaType.OBJECT,
     properties: {
         inferred_project_type: {
-            type: "string",
+            type: SchemaType.STRING,
             enum: ["bathroom", "kitchen", "bedroom", "living_room", "painting", "flooring", "unclear"]
         },
         follow_up_questions: {
-            type: "array",
+            type: SchemaType.ARRAY,
             items: {
-                type: "object",
+                type: SchemaType.OBJECT,
                 properties: {
-                    id: { type: "string" },
-                    priority: { type: "integer" },
-                    question_sv: { type: "string" },
-                    type: { type: "string", enum: ["yes_no", "single_choice", "number"] },
+                    id: { type: SchemaType.STRING },
+                    priority: { type: SchemaType.INTEGER },
+                    question_sv: { type: SchemaType.STRING },
+                    type: { type: SchemaType.STRING, enum: ["yes_no", "single_choice", "number"] },
                     options: {
-                        type: "array",
-                        items: { type: "string" }
+                        type: SchemaType.ARRAY,
+                        items: { type: SchemaType.STRING }
                     },
-                    maps_to: { type: "string" },
-                    why_it_matters_sv: { type: "string" },
-                    ask_mode: { type: "string", enum: ["ask", "confirm"] },
-                    prefill_guess: { type: ["string", "number", "null"] },
-                    prefill_confidence: { type: ["string", "null"], enum: ["low", "medium", "high", null] },
-                    prefill_basis_sv: { type: ["string", "null"] }
+                    maps_to: { type: SchemaType.STRING },
+                    why_it_matters_sv: { type: SchemaType.STRING },
+                    ask_mode: { type: SchemaType.STRING, enum: ["ask", "confirm"] },
+                    prefill_guess: { type: SchemaType.STRING, nullable: true },
+                    prefill_confidence: { type: SchemaType.STRING, enum: ["low", "medium", "high"], nullable: true },
+                    prefill_basis_sv: { type: SchemaType.STRING, nullable: true }
                 },
                 required: ["id", "priority", "question_sv", "type", "maps_to", "why_it_matters_sv", "ask_mode"]
             }

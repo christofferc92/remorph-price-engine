@@ -61,9 +61,9 @@ export const step1ResponseSchema = {
                     maps_to: { type: SchemaType.STRING },
                     why_it_matters_sv: { type: SchemaType.STRING },
                     ask_mode: { type: SchemaType.STRING, enum: ["ask", "confirm"] },
-                    prefill_guess: { type: SchemaType.STRING, nullable: true },
-                    prefill_confidence: { type: SchemaType.STRING, enum: ["low", "medium", "high"], nullable: true },
-                    prefill_basis_sv: { type: SchemaType.STRING, nullable: true }
+                    prefill_guess: { type: SchemaType.STRING },
+                    prefill_confidence: { type: SchemaType.STRING, enum: ["low", "medium", "high"] },
+                    prefill_basis_sv: { type: SchemaType.STRING }
                 },
                 required: ["id", "priority", "question_sv", "type", "maps_to", "why_it_matters_sv", "ask_mode"]
             }
@@ -95,9 +95,9 @@ export const step1ResponseSchemaSimplified = {
                     maps_to: { type: SchemaType.STRING },
                     why_it_matters_sv: { type: SchemaType.STRING },
                     ask_mode: { type: SchemaType.STRING, enum: ["ask", "confirm"] },
-                    prefill_guess: { type: SchemaType.STRING, nullable: true },
-                    prefill_confidence: { type: SchemaType.STRING, enum: ["low", "medium", "high"], nullable: true },
-                    prefill_basis_sv: { type: SchemaType.STRING, nullable: true }
+                    prefill_guess: { type: SchemaType.STRING },
+                    prefill_confidence: { type: SchemaType.STRING, enum: ["low", "medium", "high"] },
+                    prefill_basis_sv: { type: SchemaType.STRING }
                 },
                 required: ["id", "priority", "question_sv", "type", "maps_to", "why_it_matters_sv", "ask_mode"]
             }

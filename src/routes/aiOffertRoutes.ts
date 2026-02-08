@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { analyzeBathroomImage, AiAnalysisError } from '../ai-price-engine/services/gemini';
-import { generateOffertunderlag } from '../ai-price-engine/services/offert-generator';
-import { AnalysisResponse, OffertResponse } from '../ai-price-engine/types';
+import { generateOffertunderlag, generateOffertunderlagV2 } from '../ai-price-engine/services/offert-generator';
+import { AnalysisResponse, OffertResponse, EstimateResponseV2, RotInputV2, UnitType } from '../ai-price-engine/types';
 import { generateAfterImage } from '../ai-image-engine';
 import { uploadPngAndSign } from '../lib/supabaseStorage';
 import {
@@ -13,11 +13,27 @@ import {
     cacheIdempotency,
 } from '../lib/guardrails';
 import { estimateTextCostUsd } from '../lib/costDebug';
-import { generateOffertunderlagV2 } from '../ai-price-engine/services/offert-generator';
 import { calculateEstimate } from '../lib/pricing';
 import { saveEstimate, loadEstimate } from '../lib/store';
-import { RepriceRequestV2, SectionV2, LineItemV2 } from '../ai-price-engine/types';
 import { sendError, rateLimitMiddleware } from '../lib/api-harden';
+
+// Type for line item edits in reprice endpoint
+type LineItemEdit = {
+    line_item_id: string;
+    qty?: number;
+    unit?: UnitType;
+    unit_price_incl_vat?: number;
+    labor_share?: number;  // 0-1 range
+    is_rot_eligible?: boolean;
+    manual_override?: boolean;
+};
+
+type RepriceRequestV2 = {
+    estimate_id: string;
+    edits?: LineItemEdit[];
+    rot_input?: RotInputV2;
+    reset_overrides?: boolean;
+};
 
 const router = Router();
 
@@ -95,7 +111,6 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
         };
 
         // Include user_description in response so it's available for Step 2
-        console.log(`[AI-Offert] [${requestId}] ANALYZE returning user_description: "${description}"`);
         res.json({ ...analysis, user_description: description, debug_cost, request_id: requestId });
     } catch (error: any) {
         if (error instanceof AiAnalysisError) {
@@ -135,7 +150,6 @@ router.post('/generate', async (req, res) => {
 
 
         // Call AI Price Engine Step 2 (V2) - pass user description for scope detection
-        console.log(`[AI-Offert] [${requestId}] GENERATE received user_description: "${step1.user_description}"`);
         const { data: estimate, usageMetadata } = await generateOffertunderlagV2(
             step1 as AnalysisResponse,
             answers,
@@ -194,10 +208,10 @@ router.post('/reprice', async (req, res) => {
         if (edits) {
             for (const edit of edits) {
                 if (edit.qty !== undefined && edit.qty < 0) return sendError(res, 400, `Invalid qty for ${edit.line_item_id}`);
-                if (edit.unit_price_sek_incl_vat !== undefined && edit.unit_price_sek_incl_vat < 0) {
+                if (edit.unit_price_incl_vat !== undefined && edit.unit_price_incl_vat < 0) {
                     return sendError(res, 400, `Invalid price for ${edit.line_item_id}`);
                 }
-                if (edit.labor_share_percent !== undefined && (edit.labor_share_percent < 0 || edit.labor_share_percent > 1)) {
+                if (edit.labor_share !== undefined && (edit.labor_share < 0 || edit.labor_share > 1)) {
                     return sendError(res, 400, `Invalid labor_share for ${edit.line_item_id}`);
                 }
             }
@@ -215,21 +229,21 @@ router.post('/reprice', async (req, res) => {
                     return {
                         ...item,
                         qty: item.original_qty ?? item.qty,
-                        unit_price_sek_incl_vat: item.original_unit_price ?? item.unit_price_sek_incl_vat,
+                        unit_price_incl_vat: item.original_unit_price ?? item.unit_price_incl_vat,
                         manual_override: undefined
                     };
                 }
 
                 // Logic B: Apply Edits
-                const edit = edits?.find(e => e.line_item_id === item.id);
+                const edit = edits?.find(e => e.line_item_id === item.id) as LineItemEdit | undefined; // Cast edit to LineItemEdit
                 if (edit) {
                     return {
                         ...item,
                         // Apply overrides
                         qty: edit.qty ?? item.qty,
                         unit: edit.unit ?? item.unit,
-                        unit_price_sek_incl_vat: edit.unit_price_sek_incl_vat ?? item.unit_price_sek_incl_vat,
-                        labor_share_percent: edit.labor_share_percent ?? item.labor_share_percent,
+                        unit_price_incl_vat: edit.unit_price_incl_vat ?? item.unit_price_incl_vat,
+                        labor_share: edit.labor_share ?? item.labor_share,
                         is_rot_eligible: edit.is_rot_eligible ?? item.is_rot_eligible,
                         manual_override: true
                     };

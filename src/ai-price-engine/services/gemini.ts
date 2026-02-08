@@ -84,9 +84,66 @@ export async function analyzeBathroomImage(
     // Convert optimized image to base64
     const base64Image = optimizedBuffer.toString('base64');
 
-    // Detect room type from description
+    // Detect room type from description first
     const { detectRoomType } = await import('../lib/roomTypeDetector');
-    const roomDetection = detectRoomType(userDescription);
+    let roomDetection = detectRoomType(userDescription);
+
+    // If unclear from text, ask AI to detect from image
+    if (roomDetection.room_type === 'unclear' || roomDetection.confidence === 'low') {
+        console.log(`[PERF_AI_ANALYZE] [${requestId}] text_detection=unclear, using image detection`);
+
+        const imageDetectionPrompt = `Analyze this image and identify what type of room this is.
+
+Respond with ONLY ONE WORD from this list:
+- kitchen
+- bathroom
+- bedroom
+- living_room
+- unclear
+
+Look for visual clues:
+- Kitchen: cabinets, countertops, stove, sink, refrigerator, dishwasher
+- Bathroom: toilet, shower, bathtub, sink, tiles, drain
+- Bedroom: bed, closets, nightstands
+- Living room: sofa, TV, coffee table
+
+Respond with just the room type, nothing else.`;
+
+        try {
+            const detectionModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+            const detectionResult = await detectionModel.generateContent([
+                {
+                    inlineData: {
+                        data: base64Image,
+                        mimeType: 'image/jpeg',
+                    },
+                },
+                { text: imageDetectionPrompt }
+            ]);
+
+            const detectedRoom = detectionResult.response.text().trim().toLowerCase();
+            console.log(`[PERF_AI_ANALYZE] [${requestId}] image_detected_room=${detectedRoom}`);
+
+            // Map AI response to our room types
+            if (detectedRoom === 'kitchen') {
+                roomDetection = {
+                    room_type: 'kitchen',
+                    confidence: 'high',
+                    basis: 'Detected from image by AI'
+                };
+            } else if (detectedRoom === 'bathroom') {
+                roomDetection = {
+                    room_type: 'bathroom',
+                    confidence: 'high',
+                    basis: 'Detected from image by AI'
+                };
+            }
+            // If still unclear or other room types, default to bathroom for now
+        } catch (error) {
+            console.warn(`[PERF_AI_ANALYZE] [${requestId}] image_detection_failed, defaulting to bathroom`);
+            // Fall back to bathroom on error
+        }
+    }
 
     // Route to appropriate prompt builder based on room type
     let prompt: string;
@@ -99,7 +156,7 @@ export async function analyzeBathroomImage(
         prompt = buildBathroomStep1(userDescription, isRetry);
     }
 
-    console.log(`[PERF_AI_ANALYZE] [${requestId}] room_type=${roomDetection.room_type} confidence=${roomDetection.confidence}`);
+    console.log(`[PERF_AI_ANALYZE] [${requestId}] room_type=${roomDetection.room_type} confidence=${roomDetection.confidence} basis="${roomDetection.basis}"`);
 
     try {
         // 2. Generate content with optimized image and constraints

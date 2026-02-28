@@ -24,6 +24,7 @@
     "generate:price-copy-catalog": "TSX_DISABLE_DAEMON=1 tsx scripts/generate-price-copy-catalog.ts"
   },
   "dependencies": {
+    "@google/genai": "^1.43.0",
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.93.3",
     "cors": "^2.8.5",

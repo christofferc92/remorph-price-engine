@@ -349,37 +349,44 @@ router.post('/generate-after-image', async (req, res) => {
 
         // --- Call Gemini Image Generation API (with one retry on 429/5xx) ---
         const callGemini = async (): Promise<{ base64?: string; url?: string }> => {
-            const { GoogleGenAI } = await import('@google/genai');
-            const ai = new GoogleGenAI({
-                apiKey,
-                httpOptions: { apiVersion: 'v1alpha' }
-            });
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:predict?key=${apiKey}`;
 
-            const imagePart = {
-                inlineData: {
-                    data: imageBuffer.toString('base64'),
-                    mimeType: imageMimeType,
+            const payload = {
+                instances: [
+                    { prompt }
+                ],
+                parameters: {
+                    sampleCount: 1,
+                    outputOptions: {
+                        mimeType: "image/png"
+                    }
                 }
             };
 
-            const textPart = prompt;
-
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.0-flash-preview-image-generation',
-                contents: [imagePart, textPart],
-                config: {
-                    responseModalities: ["IMAGE"]
-                }
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             });
 
-            // Extract base64 image data from the response parts
-            for (const part of response.candidates?.[0]?.content?.parts || []) {
-                if (part.inlineData && part.inlineData.data) {
-                    return { base64: part.inlineData.data };
+            if (!response.ok) {
+                const errText = await response.text().catch(() => response.statusText);
+                const err: any = new Error(`Gemini ${response.status}: ${errText}`);
+                err.status = response.status;
+                throw err;
+            }
+
+            const json = await response.json() as any;
+
+            // Extract base64 image data from the predict response format
+            if (json.predictions && json.predictions.length > 0) {
+                const p = json.predictions[0];
+                if (p.bytesBase64Encoded) {
+                    return { base64: p.bytesBase64Encoded };
                 }
             }
 
-            throw new Error('Gemini response did not contain inline image data');
+            throw new Error('Gemini response did not contain predictions with bytesBase64Encoded');
         };
 
         let result: { base64?: string; url?: string };

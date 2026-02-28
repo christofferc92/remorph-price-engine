@@ -1,18 +1,24 @@
 /**
  * STEP 1 Prompt Builder for Kitchen Renovations
+ *
+ * Generates EXACTLY 4 priority questions for the initial phase.
+ * The AI also outputs a recommended_total_questions (5-20) based on
+ * renovation complexity. The frontend uses that value to suggest how
+ * many questions the user should answer in total.
  */
 
 import { analyzeDescription, buildContextInstructions } from '../../lib/descriptionAnalyzer';
 
 export function buildStep1Prompt(userDescription: string, simplified: boolean = false): string {
-    // Analyze user description for intent and preferences
-    const analysis = analyzeDescription(userDescription);
-    const contextInstructions = buildContextInstructions(analysis);
-    const questionCount = analysis.suggested_question_count;
+  // Analyze user description for intent and preferences
+  const analysis = analyzeDescription(userDescription);
+  const contextInstructions = buildContextInstructions(analysis);
+  const recommendedTotal = analysis.recommended_total_questions;
 
-    const schema = simplified
-        ? `{
+  const schema = simplified
+    ? `{
   "inferred_project_type": "kitchen",
+  "recommended_total_questions": <integer between 5 and 20>,
   "follow_up_questions": [
     {
       "id": "q1",
@@ -27,11 +33,12 @@ export function buildStep1Prompt(userDescription: string, simplified: boolean = 
       "prefill_confidence": null,
       "prefill_basis_sv": null
     }
-    ... EXACTLY ${questionCount} total questions ...
+    ... EXACTLY 4 total questions ...
   ]
 }`
-        : `{
+    : `{
   "inferred_project_type": "kitchen",
+  "recommended_total_questions": <integer between 5 and 20>,
   "image_observations": {
     "summary_sv": "Brief summary in Swedish of what you see",
     "inferred_size_sqm": {
@@ -61,64 +68,55 @@ export function buildStep1Prompt(userDescription: string, simplified: boolean = 
       "prefill_confidence": "low" | "medium" | "high" | null,
       "prefill_basis_sv": "Why I guessed this from the image" | null
     }
-    ... EXACTLY ${questionCount} total questions ...
+    ... EXACTLY 4 total questions ...
   ]
 }`;
 
-    const retryInstructions = simplified
-        ? "\nSTRICT RULE: Be extremely concise. Max 10 words per text field. No long explanations. Swedish language."
-        : "";
+  const retryInstructions = simplified
+    ? "\nSTRICT RULE: Be extremely concise. Max 10 words per text field. No long explanations. Swedish language."
+    : "";
 
-    return `You are an assistant for Swedish renovation estimating. Your job in STEP 1 is to analyze the provided image and the user's text description and generate EXACTLY ${questionCount} follow-up questions needed to produce a contractor-usable "offertunderlag" and an initial price range estimate in SEK (kr) later.
+  return `You are an assistant for Swedish renovation estimating. Your job in STEP 1 is to analyze the provided image and the user's text description and generate EXACTLY 4 high-priority follow-up questions. These are the FIRST 4 questions presented to the user before they decide how many questions to answer in total.
 ${retryInstructions}
 
 USER'S DESCRIPTION: "${userDescription}"
 ${contextInstructions}
 
-QUESTION COUNT RULES:
-- Cabinet refresh only (5-7 questions): Focus on cabinet type, quantity, hardware, installation complexity
-- Countertop replacement (5-7 questions): Material, size, edge profile, sink cutouts, installation
-- Partial kitchen (8-10 questions): Identify what to replace vs keep, plus details for selected elements
-- Full kitchen (11-15 questions): Comprehensive coverage of cabinets, countertops, appliances, plumbing, electrical, flooring
+RECOMMENDED TOTAL QUESTIONS:
+Based on the renovation complexity, set "recommended_total_questions" to a value between 5 and 20:
+- Cabinet refresh or countertop-only: 5-7 questions total
+- Partial kitchen (some elements): 8-11 questions total
+- Full kitchen renovation: 12-16 questions total
+- Very complex (layout changes, structural, premium): 16-20 questions total
+Your estimate this time: ${recommendedTotal} (adjust ±3 based on what you observe in the image and description)
 
-Key principles:
+CRITICAL: Output EXACTLY 4 follow_up_questions. No more, no less.
+These 4 questions must be the HIGHEST priority – establishing scope and major cost drivers.
+DO NOT include an address, location, or municipality question – that is handled separately by the app.
+
+Key principles for these 4 questions:
 - Focus on questions that materially affect cost, scope, time, risk, and trade requirements in Sweden.
 - Do NOT ask aesthetic/style questions unless they impact cost (e.g., IKEA vs custom cabinets, laminate vs stone countertops).
-- Prefer confirmation of inferred facts: if you can infer something from the image, propose your best guess with confidence and ask the user to confirm/correct.
-- Do NOT invent hidden facts (e.g., plumbing condition, electrical capacity). If unknown, ask explicitly with "Vet ej" option.
+- Prefer confirmation of inferred facts: if you can infer from the image, propose your best guess.
+- Do NOT invent hidden facts (e.g., plumbing condition, electrical capacity). If unknown, ask with "Vet ej" option.
 - Use Swedish language in questions and outputs.
 - Currency is SEK (kr). Units should be metric (m², löpm for countertops).
-- Keep questions minimal but sufficient for an offertunderlag. If you must choose, prioritize cost drivers over "nice-to-have" info.
 
-Kitchen-specific focus:
-- Scope lock first (cabinet-only vs countertop-only vs partial vs full kitchen)
-- Cabinet type and quality (IKEA Metod, Marbodal, Ballingslöv, custom)
-- Countertop material (laminat, komposit/Silestone, natursten/granit/marmor)
-- Appliances to include/replace (spis, kyl, diskmaskin, fläkt)
-- Plumbing relocations (diskho, diskmaskin)
-- Electrical work (uttag, belysning, spisanslutning)
-- Flooring changes
-- Demolition and disposal of old kitchen
-- Region/kommun (affects labor rates) if needed
+Kitchen-specific focus for the initial 4 questions:
+1. Scope lock (cabinet-refresh vs countertop-only vs partial vs full kitchen) – ALWAYS question 1
+2. Kitchen size / cabinet count – ALWAYS question 2
+3. Cabinet quality tier (IKEA Metod, semi-custom Marbodal, fully custom) – key cost driver
+4. Countertop material (laminat, komposit/Silestone, natursten) OR appliances included – pick most impactful
 
 PREFILL/CONFIRM FLOW:
 - For questions where you CAN infer an answer from the image:
-  - Set ask_mode="confirm"
-  - Provide prefill_guess with your best estimate
-  - Set prefill_confidence based on how certain you are
-  - Explain your reasoning in prefill_basis_sv
+  - Set ask_mode="confirm", provide prefill_guess, prefill_confidence, and prefill_basis_sv
 - For questions where you CANNOT infer from the image:
-  - Set ask_mode="ask"
-  - Leave prefill_guess, prefill_confidence, prefill_basis_sv as null
-
-QUESTION PRIORITIZATION:
-- Priority 1 (always include): Scope definition, kitchen size, cabinet type, countertop material
-- Priority 2 (include for partial/full): Appliances, plumbing changes, electrical work
-- Priority 3 (include for full only): Flooring, demolition extent, layout changes
+  - Set ask_mode="ask", set prefill_* fields to null
 
 OUTPUT REQUIREMENTS:
 - Must be valid JSON
-- Must be EXACTLY ${questionCount} questions in follow_up_questions array
+- Must be EXACTLY 4 questions in follow_up_questions array
 - Each question must have all required fields
 - Questions should be ordered by priority (most important first)
 - Use Swedish language for all user-facing text

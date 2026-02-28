@@ -1,7 +1,14 @@
 /**
  * STEP 1 Prompt Builder for Bathroom Renovations
- * 
- * Future: Add prompts/kitchen, prompts/painting for other room types
+ *
+ * Generates EXACTLY 4 priority questions for the initial phase.
+ * The AI also outputs a recommended_total_questions (5-20) based on
+ * renovation complexity. The frontend uses that value to suggest how
+ * many questions the user should answer in total.
+ *
+ * Question 5 is ALWAYS the address/location question – handled by the
+ * frontend (optional geolocation), so we never include it here.
+ * Questions 6+ are generated dynamically via /generate-more-questions.
  */
 
 import { analyzeDescription, buildContextInstructions } from '../../lib/descriptionAnalyzer';
@@ -10,11 +17,12 @@ export function buildStep1Prompt(userDescription: string, simplified: boolean = 
   // Analyze user description for intent and preferences
   const analysis = analyzeDescription(userDescription);
   const contextInstructions = buildContextInstructions(analysis);
-  const questionCount = analysis.suggested_question_count;
+  const recommendedTotal = analysis.recommended_total_questions;
 
   const schema = simplified
     ? `{
   "inferred_project_type": "bathroom",
+  "recommended_total_questions": <integer between 5 and 20>,
   "follow_up_questions": [
     {
       "id": "q1",
@@ -29,11 +37,12 @@ export function buildStep1Prompt(userDescription: string, simplified: boolean = 
       "prefill_confidence": null,
       "prefill_basis_sv": null
     }
-    ... EXACTLY ${questionCount} total questions ...
+    ... EXACTLY 4 total questions ...
   ]
 }`
     : `{
   "inferred_project_type": "bathroom",
+  "recommended_total_questions": <integer between 5 and 20>,
   "image_observations": {
     "summary_sv": "Brief summary in Swedish of what you see",
     "inferred_size_sqm": {
@@ -63,7 +72,7 @@ export function buildStep1Prompt(userDescription: string, simplified: boolean = 
       "prefill_confidence": "low" | "medium" | "high" | null,
       "prefill_basis_sv": "Why I guessed this from the image" | null
     }
-    ... EXACTLY ${questionCount} total questions ...
+    ... EXACTLY 4 total questions ...
   ]
 }`;
 
@@ -71,58 +80,51 @@ export function buildStep1Prompt(userDescription: string, simplified: boolean = 
     ? "\nSTRICT RULE: Be extremely concise. Max 10 words per text field. No long explanations. Swedish language."
     : "";
 
-  return `You are an assistant for Swedish renovation estimating. Your job in STEP 1 is to analyze the provided image and the user's text description and generate EXACTLY ${questionCount} follow-up questions needed to produce a contractor-usable "offertunderlag" and an initial price range estimate in SEK (kr) later.
+  return `You are an assistant for Swedish renovation estimating. Your job in STEP 1 is to analyze the provided image and the user's text description and generate EXACTLY 4 high-priority follow-up questions. These are the FIRST 4 questions that will be presented to the user before they choose how many total questions they want to answer.
 ${retryInstructions}
 
 USER'S DESCRIPTION: "${userDescription}"
 ${contextInstructions}
 
-QUESTION COUNT RULES:
-- Floor-only scope (5-7 questions): Focus on floor material, bathroom size, underfloor heating, current flooring, access constraints
-- Partial renovation (8-10 questions): Identify scope boundaries (what to renovate vs preserve), plus key details for selected areas
-- Full bathroom (11-15 questions): Comprehensive coverage of floor, walls, ceiling, fixtures, plumbing, electrical, ventilation
+RECOMMENDED TOTAL QUESTIONS:
+Based on the renovation complexity, set "recommended_total_questions" to a value between 5 and 20:
+- Floor-only renovation: 5-7 questions total
+- Partial renovation (some areas): 8-11 questions total
+- Full bathroom renovation: 12-16 questions total
+- Very complex (layout changes, premium materials, accessibility): 16-20 questions total
+Your estimate this time: ${recommendedTotal} (adjust ±3 based on what you observe in the image and description)
 
-Key principles:
+CRITICAL: Output EXACTLY 4 follow_up_questions. No more, no less.
+These 4 questions must be the HIGHEST priority questions – the ones most critical for establishing scope and major cost drivers.
+DO NOT include an address, location, or municipality question – that is handled separately by the app.
+
+Key principles for these 4 questions:
 - Focus on questions that materially affect cost, scope, time, risk, and trade requirements in Sweden.
-- Do NOT ask aesthetic/style questions unless they impact cost (e.g., tile size, tile price tier, pattern complexity).
+- Do NOT ask aesthetic/style questions unless they impact cost (e.g., tile size, tile price tier).
 - Prefer confirmation of inferred facts: if you can infer something from the image, propose your best guess with confidence and ask the user to confirm/correct.
-- Do NOT invent hidden facts (e.g., age of waterproofing, condition behind walls). If unknown, ask explicitly with "Vet ej" option.
+- Do NOT invent hidden facts. If unknown, ask explicitly with "Vet ej" option.
 - Use Swedish language in questions and outputs.
 - Currency is SEK (kr). Units should be metric (m², mm).
-- Keep questions minimal but sufficient for an offertunderlag. If you must choose, prioritize cost drivers over "nice-to-have" info.
 
-Bathroom-specific focus (for now):
-- Scope lock first (floor-only vs full bathroom vs partial)
-- Waterproofing/tätskikt and wet-room compliance implications
-- Demolition/removal type (matta/klinker, etc.)
-- Floor drain and slope/fall work
-- Underfloor heating
-- Fixture removals/reinstallations
-- Material class and tile size/pattern complexity
-- Accessibility constraints that affect labor (occupied home, timing, access)
-- Region/kommun (affects labor rates) if needed
+Bathroom-specific focus for the initial 4 questions:
+1. Scope lock (floor-only vs full bathroom vs partial) – ALWAYS question 1
+2. Approximate bathroom floor area (size) – ALWAYS question 2
+3. Waterproofing/tätskikt need – critical cost driver, ask early
+4. Key fixture change (e.g. new shower, toilet, bathtub) OR underfloor heating – pick the most impactful based on context
 
 PREFILL/CONFIRM FLOW:
 - For questions where you CAN infer an answer from the image:
-  - Set ask_mode="confirm"
-  - Provide prefill_guess with your best estimate
-  - Set prefill_confidence based on how certain you are
-  - Explain your reasoning in prefill_basis_sv
+  - Set ask_mode="confirm", provide prefill_guess, prefill_confidence, and prefill_basis_sv
 - For questions where you CANNOT infer from the image:
-  - Set ask_mode="ask"
-- Drain condition or placement (unless clearly visible)
-- Electrical scope
-- Waste disposal responsibility
-- Municipality/location
-- User preferences (timeline, budget tier, etc.)
+  - Set ask_mode="ask", set prefill_* fields to null
 
 Return ONLY valid JSON matching this exact schema:
 ${schema}
 
 CRITICAL RULES:
-- Must be EXACTLY 10 questions in follow_up_questions array
+- Must be EXACTLY 4 questions in follow_up_questions array
 - Questions must be ordered by priority (highest pricing impact first)
-- Each question must have a maps_to key from this list: scope_level, floor_area_sqm_confirmed, waterproofing_needed, demolition_existing_floor, subfloor_leveling_needed, floor_drain_present, slope_adjustment_needed, underfloor_heating, tile_price_tier, tile_size_category, laying_pattern_complexity, fixture_remove_reinstall, access_constraints, location_municipality, waste_disposal_needed, start_time_preference
+- Each question must have a maps_to key from: scope_level, floor_area_sqm_confirmed, waterproofing_needed, demolition_existing_floor, subfloor_leveling_needed, floor_drain_present, slope_adjustment_needed, underfloor_heating, tile_price_tier, tile_size_category, laying_pattern_complexity, fixture_remove_reinstall, access_constraints, waste_disposal_needed, start_time_preference
 - Use single_choice instead of text whenever possible
 - Include "Vet ej" option where relevant for ask_mode="ask" questions
 - All text in Swedish (question_sv, why_it_matters_sv, summary_sv, basis_sv, prefill_basis_sv)

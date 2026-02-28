@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import sharp from 'sharp';
-import { AnalysisResponse } from '../types';
+import { AnalysisResponse, FollowUpQuestion } from '../types';
 
 // Validate API key exists at runtime, but don't load dotenv here (environment's responsibility)
 function getGenAIClient() {
@@ -82,7 +82,8 @@ export async function analyzeBathroomImage(
         model: modelName,
         generationConfig: {
             responseMimeType: "application/json",
-            responseSchema: schema,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            responseSchema: schema as any,
             maxOutputTokens: 4096,
         }
     });
@@ -204,20 +205,17 @@ Respond with just the room type, nothing else.`;
             throw new AiAnalysisError('Gemini output missing follow_up_questions', 'schema_validate', rawOutput);
         }
 
-        // Adaptive question count validation (with tolerance)
-        const { analyzeDescription } = await import('../lib/descriptionAnalyzer');
-        const expectedCount = analyzeDescription(userDescription).suggested_question_count;
+        // Validate exactly 4 questions from the initial analysis
         const actualCount = analysis.follow_up_questions.length;
-        const tolerance = 2;
-
-        if (actualCount < expectedCount - tolerance) {
-            console.warn(`[PERF_AI_ANALYZE] [${requestId}] question_count_low expected=${expectedCount} actual=${actualCount}`);
-            // Don't fail - AI might have good reasons for fewer questions
-        } else if (actualCount > expectedCount + tolerance) {
-            console.warn(`[PERF_AI_ANALYZE] [${requestId}] question_count_high expected=${expectedCount} actual=${actualCount}`);
-            // Don't fail - AI might have good reasons for more questions
+        if (actualCount !== 4) {
+            console.warn(`[PERF_AI_ANALYZE] [${requestId}] question_count_unexpected expected=4 actual=${actualCount}`);
+            // Don't fail – trim to 4 if too many, or surface a warning if fewer
+            if (actualCount > 4) {
+                analysis.follow_up_questions = analysis.follow_up_questions.slice(0, 4);
+                console.log(`[PERF_AI_ANALYZE] [${requestId}] trimmed_to_4`);
+            }
         } else {
-            console.log(`[PERF_AI_ANALYZE] [${requestId}] question_count_ok expected=${expectedCount} actual=${actualCount}`);
+            console.log(`[PERF_AI_ANALYZE] [${requestId}] question_count_ok actual=${actualCount}`);
         }
 
         console.log(`[PERF_AI_ANALYZE] [${requestId}] attempt=${attempt}/2 status=success output_len=${output_len}`);
@@ -233,4 +231,102 @@ Respond with just the room type, nothing else.`;
         console.error('Error analyzing bathroom image:', error);
         throw error;
     }
+}
+
+// (Schema is built inline inside generateMoreQuestions using SchemaType enum)
+
+/**
+ * Generates the remaining questions (questions 6+) based on:
+ * - The initial analysis (step1 output, including first 4 questions)
+ * - Answers to the first 4 questions
+ * - The user's selected total question count
+ *
+ * This is called while the user fills out the address question (Q5).
+ */
+export async function generateMoreQuestions(
+    step1: AnalysisResponse,
+    answers: Record<string, string | number>,
+    targetTotal: number,
+    userDescription: string,
+    requestId: string = 'unknown'
+): Promise<{ questions: FollowUpQuestion[]; usageMetadata: any }> {
+    const numToGenerate = targetTotal - 5; // 5 = 4 initial questions + 1 hardcoded address question
+
+    if (numToGenerate <= 0) {
+        console.log(`[GEN_MORE_Q] [${requestId}] targetTotal=${targetTotal} <= 5, returning empty`);
+        return { questions: [], usageMetadata: null };
+    }
+
+    const { buildGenerateMoreQuestionsPrompt } = await import('../prompts/shared/generateMoreQuestions');
+    const prompt = buildGenerateMoreQuestionsPrompt({ step1, answers, targetTotal, userDescription });
+
+    const genAI = getGenAIClient();
+    const { SchemaType } = await import('@google/generative-ai');
+
+    // Build schema dynamically using SchemaType enum
+    const responseSchema = {
+        type: SchemaType.OBJECT,
+        properties: {
+            additional_questions: {
+                type: SchemaType.ARRAY,
+                items: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                        id: { type: SchemaType.STRING },
+                        priority: { type: SchemaType.INTEGER },
+                        question_sv: { type: SchemaType.STRING },
+                        type: { type: SchemaType.STRING, enum: ['yes_no', 'single_choice', 'text', 'number'] },
+                        options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+                        maps_to: { type: SchemaType.STRING },
+                        why_it_matters_sv: { type: SchemaType.STRING },
+                        ask_mode: { type: SchemaType.STRING, enum: ['ask', 'confirm'] },
+                        prefill_guess: { type: SchemaType.STRING },
+                        prefill_confidence: { type: SchemaType.STRING, enum: ['low', 'medium', 'high'] },
+                        prefill_basis_sv: { type: SchemaType.STRING },
+                    },
+                    required: ['id', 'priority', 'question_sv', 'type', 'maps_to', 'why_it_matters_sv', 'ask_mode']
+                }
+            }
+        },
+        required: ['additional_questions']
+    };
+
+    const model = genAI.getGenerativeModel({
+        model: 'gemini-2.0-flash',
+        generationConfig: {
+            responseMimeType: 'application/json',
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            responseSchema: responseSchema as any,
+            maxOutputTokens: 4096,
+        }
+    });
+
+    const tStart = performance.now();
+    const result = await model.generateContent([{ text: prompt }]);
+    const gemini_time_ms = Math.round(performance.now() - tStart);
+
+    const text = result.response.text();
+    const output_len = text.length;
+
+    console.log(`[GEN_MORE_Q] [${requestId}] targetTotal=${targetTotal} numToGenerate=${numToGenerate} gemini_time_ms=${gemini_time_ms} output_len=${output_len}`);
+
+    let parsed: { additional_questions: FollowUpQuestion[] };
+    try {
+        parsed = extractJson(text);
+    } catch (e: any) {
+        console.error(`[GEN_MORE_Q] [${requestId}] parse error: ${e.message}`);
+        throw new AiAnalysisError(`Failed to parse generate-more-questions output: ${e.message}`, 'gemini_parse', text.slice(0, 500));
+    }
+
+    if (!parsed.additional_questions || !Array.isArray(parsed.additional_questions)) {
+        throw new AiAnalysisError('Missing additional_questions array in response', 'schema_validate');
+    }
+
+    const questions = parsed.additional_questions.slice(0, numToGenerate);
+    console.log(`[GEN_MORE_Q] [${requestId}] returned=${questions.length} expected=${numToGenerate}`);
+
+    return {
+        questions,
+        usageMetadata: result.response.usageMetadata
+    };
 }

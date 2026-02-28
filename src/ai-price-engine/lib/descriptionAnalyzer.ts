@@ -9,7 +9,8 @@ export interface DescriptionAnalysis {
     explicit_exclusions: string[];
     budget_signals: 'budget' | 'mid' | 'premium' | 'unclear';
     urgency_signals: 'quick' | 'normal' | 'flexible';
-    suggested_question_count: number;
+    /** Recommended total number of questions (5-20) based on renovation complexity. This is shown to the user as the default suggestion. */
+    recommended_total_questions: number;
 }
 
 /**
@@ -24,7 +25,7 @@ export function analyzeDescription(description: string): DescriptionAnalysis {
         explicit_exclusions: [],
         budget_signals: 'unclear',
         urgency_signals: 'normal',
-        suggested_question_count: 10,
+        recommended_total_questions: 10,
     };
 
     // Detect primary intent
@@ -39,11 +40,11 @@ export function analyzeDescription(description: string): DescriptionAnalysis {
         // +1 if complex/specialized material
         if (lower.match(/microcement|epoxy|terrazzo|natursten/)) count++;
 
-        analysis.suggested_question_count = Math.min(count, 7);
+        analysis.recommended_total_questions = Math.min(count, 7);
     } else if (lower.match(/\b(golv|floor)\b/) && !lower.match(/\b(vägg|wall|kakel|tile|toalett|toilet|dusch|shower|badkar|bath)/)) {
         // If only mentions floor and nothing else
         analysis.primary_intent = 'floor_only';
-        analysis.suggested_question_count = 6;
+        analysis.recommended_total_questions = 6;
     } else if (lower.match(/\b(total|komplett|full|helt|complete)/)) {
         analysis.primary_intent = 'full';
         // Base: 11 questions for full renovation
@@ -58,10 +59,10 @@ export function analyzeDescription(description: string): DescriptionAnalysis {
         // +1 if premium materials mentioned
         if (lower.match(/premium|lyx|exklusiv|marmor|marble/)) count++;
 
-        analysis.suggested_question_count = Math.min(count, 15);
+        analysis.recommended_total_questions = Math.min(count, 20);
     } else if (lower.match(/\b(delvis|partial|vissa|byt.*och)/)) {
         analysis.primary_intent = 'partial';
-        analysis.suggested_question_count = 10;
+        analysis.recommended_total_questions = 10;
     }
 
     // Extract explicit requests
@@ -128,12 +129,12 @@ export function buildContextInstructions(analysis: DescriptionAnalysis): string 
         instructions.push('CONTEXT: User wants floor-only renovation.');
         instructions.push('- Prioritize: floor material, underfloor heating, drain, waterproofing');
         instructions.push('- De-prioritize or skip: fixture replacement, wall tiles, ceiling');
-        instructions.push(`- Target ${analysis.suggested_question_count} questions (not 10)`);
+        instructions.push(`- Target ${analysis.recommended_total_questions} questions (not 10)`);
     } else if (analysis.primary_intent === 'full') {
         instructions.push('CONTEXT: User wants full bathroom renovation.');
         instructions.push('- Cover all aspects: floor, walls, ceiling, fixtures, systems');
         instructions.push('- Include detailed material and finish questions');
-        instructions.push(`- Target ${analysis.suggested_question_count} questions for comprehensive coverage`);
+        instructions.push(`- Target ${analysis.recommended_total_questions} questions for comprehensive coverage`);
     } else if (analysis.primary_intent === 'partial') {
         instructions.push('CONTEXT: User wants partial renovation.');
         instructions.push('- Focus on identifying which areas to renovate vs preserve');

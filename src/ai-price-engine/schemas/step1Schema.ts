@@ -67,9 +67,10 @@ export const step1ResponseSchema = {
                 },
                 required: ["id", "priority", "question_sv", "type", "maps_to", "why_it_matters_sv", "ask_mode"]
             }
-        }
+        },
+        recommended_total_questions: { type: SchemaType.INTEGER }
     },
-    required: ["inferred_project_type", "follow_up_questions"]
+    required: ["inferred_project_type", "follow_up_questions", "recommended_total_questions"]
 };
 
 export const step1ResponseSchemaSimplified = {
@@ -101,7 +102,8 @@ export const step1ResponseSchemaSimplified = {
                 },
                 required: ["id", "priority", "question_sv", "type", "maps_to", "why_it_matters_sv", "ask_mode"]
             }
-        }
+        },
+        recommended_total_questions: { type: SchemaType.INTEGER }
     },
-    required: ["inferred_project_type", "follow_up_questions"]
+    required: ["inferred_project_type", "follow_up_questions", "recommended_total_questions"]
 };

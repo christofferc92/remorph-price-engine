@@ -48,6 +48,8 @@ export interface AnalysisResponse {
     image_observations?: ImageObservations;
     scope_guess?: ScopeGuess;
     follow_up_questions: FollowUpQuestion[];
+    /** AI-recommended total number of questions based on renovation complexity (5-20). Frontend uses this to suggest a starting point to the user. */
+    recommended_total_questions: number;
 }
 
 // ============================================

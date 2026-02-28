@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { analyzeBathroomImage, AiAnalysisError } from '../ai-price-engine/services/gemini';
+import { analyzeBathroomImage, AiAnalysisError, generateMoreQuestions } from '../ai-price-engine/services/gemini';
 import { generateOffertunderlag, generateOffertunderlagV2 } from '../ai-price-engine/services/offert-generator';
 import { AnalysisResponse, OffertResponse, EstimateResponseV2, RotInputV2, UnitType } from '../ai-price-engine/types';
 import { generateAfterImage } from '../ai-image-engine';
@@ -83,7 +83,7 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
                 console.log(`[AI-Offert] [${requestId}] Attempt 1 failed (stage=${error.stage}). Retrying with simplified contract...`);
                 try {
                     // Attempt 2 (Retry)
-                    const result = await analyzeBathroomImage(imageBuffer, userDescription, requestId, { isRetry: true });
+                    const result = await analyzeBathroomImage(imageBuffer, description, requestId, { isRetry: true });
                     analysis = result.data;
                     usage = result.usageMetadata;
                 } catch (retryError: any) {
@@ -180,6 +180,82 @@ router.post('/generate', async (req, res) => {
             return sendError(res, 502, 'AI Service Error', error.message);
         }
 
+        sendError(res, 500, 'Internal Server Error', error.message);
+    }
+});
+
+/**
+ * POST /api/ai/offert/generate-more-questions
+ * Generates additional questions (questions 6+) based on the first 4 answers.
+ * Called in the background while the user fills out the address question (Q5).
+ *
+ * Body:
+ *   step1: AnalysisResponse  – original analysis from /analyze
+ *   answers: Record<string, string|number>  – keyed by question id (q1–q4)
+ *   target_question_count: number  – user's chosen total (5-20)
+ *   user_description: string  – original text the user entered
+ */
+router.post('/generate-more-questions', async (req, res) => {
+    const requestId = res.locals.requestId;
+    try {
+        const { step1, answers, target_question_count, user_description } = req.body;
+
+        // Validate inputs
+        if (!step1) return sendError(res, 400, 'Missing required field: step1');
+        if (!answers) return sendError(res, 400, 'Missing required field: answers');
+        if (typeof target_question_count !== 'number') {
+            return sendError(res, 400, 'target_question_count must be a number');
+        }
+        if (target_question_count < 5 || target_question_count > 20) {
+            return sendError(res, 400, 'target_question_count must be between 5 and 20');
+        }
+
+        const userDescription = user_description || step1.user_description || '';
+
+        // If the user only wants 5 questions (4 initial + 1 address), return empty
+        if (target_question_count <= 5) {
+            return res.json({
+                additional_questions: [],
+                request_id: requestId
+            });
+        }
+
+        const { questions, usageMetadata } = await generateMoreQuestions(
+            step1 as AnalysisResponse,
+            answers,
+            target_question_count,
+            userDescription,
+            requestId
+        );
+
+        const debug_cost = {
+            step: 'generate_more_questions',
+            model: 'gemini-2.0-flash',
+            input_tokens: usageMetadata?.promptTokenCount || 0,
+            output_tokens: usageMetadata?.candidatesTokenCount || 0,
+            estimated_cost_usd: estimateTextCostUsd({
+                model: 'gemini-2.0-flash',
+                input_tokens: usageMetadata?.promptTokenCount || 0,
+                output_tokens: usageMetadata?.candidatesTokenCount || 0
+            })
+        };
+
+        res.json({
+            additional_questions: questions,
+            request_id: requestId,
+            debug_cost
+        });
+    } catch (error: any) {
+        if (error instanceof AiAnalysisError) {
+            console.error(`[AI-Offert] GenerateMoreQ model error [${requestId}] stage=${error.stage}:`, error.message);
+            return res.status(422).json({
+                error: 'invalid_model_output',
+                request_id: requestId,
+                stage: error.stage,
+                details: error.message
+            });
+        }
+        console.error(`[AI-Offert] GenerateMoreQ error [${requestId}]:`, error);
         sendError(res, 500, 'Internal Server Error', error.message);
     }
 });

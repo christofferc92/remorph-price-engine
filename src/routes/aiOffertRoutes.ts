@@ -261,6 +261,164 @@ router.post('/generate-more-questions', async (req, res) => {
 });
 
 /**
+ * POST /api/ai/offert/generate-after-image
+ * Accepts JSON: { beforeImageUrl, step1, answers, description?, quality?, size?, output_format? }
+ * Calls OpenAI Image Edits API and returns the after-image as a base64 data URI.
+ */
+router.post('/generate-after-image', async (req, res) => {
+    const requestId = res.locals.requestId;
+    try {
+        const {
+            beforeImageUrl,
+            step1,
+            answers = {},
+            description = '',
+            quality = 'low',
+            size = '1024x1024',
+            output_format = 'png',
+        } = req.body;
+
+        // Validate required fields
+        if (!beforeImageUrl) return sendError(res, 400, 'Missing required field: beforeImageUrl');
+        if (!step1) return sendError(res, 400, 'Missing required field: step1');
+        if (!answers) return sendError(res, 400, 'Missing required field: answers');
+
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) return sendError(res, 500, 'OPENAI_API_KEY not configured');
+
+        // --- Decode before-image to Buffer ---
+        let imageBuffer: Buffer;
+        let imageMimeType = 'image/png';
+        let imageFilename = 'before.png';
+
+        if (typeof beforeImageUrl === 'string' && beforeImageUrl.startsWith('data:')) {
+            const matches = beforeImageUrl.match(/^data:([^;]+);base64,(.+)$/s);
+            if (!matches) return sendError(res, 400, 'Invalid base64 data URL format');
+            imageMimeType = matches[1];
+            imageBuffer = Buffer.from(matches[2], 'base64');
+            imageFilename = imageMimeType === 'image/jpeg' ? 'before.jpg' : 'before.png';
+        } else if (typeof beforeImageUrl === 'string' && beforeImageUrl.startsWith('https://')) {
+            const fetchRes = await fetch(beforeImageUrl);
+            if (!fetchRes.ok) return sendError(res, 400, `Failed to fetch beforeImageUrl: ${fetchRes.status}`);
+            const ab = await fetchRes.arrayBuffer();
+            imageBuffer = Buffer.from(ab);
+            const ct = fetchRes.headers.get('content-type') || 'image/jpeg';
+            imageMimeType = ct.split(';')[0].trim();
+            imageFilename = imageMimeType === 'image/jpeg' ? 'before.jpg' : 'before.png';
+        } else {
+            return sendError(res, 400, 'beforeImageUrl must be a base64 data URL or an HTTPS URL');
+        }
+
+        // --- Build renovation prompt ---
+        const analysisStep1 = step1 as AnalysisResponse;
+        const skippedValues = new Set(['', 'Vet ej', 'skipped']);
+
+        const renovationSpecs = (analysisStep1.follow_up_questions || [])
+            .filter(q => {
+                const ans = answers[q.id];
+                return ans !== undefined &&
+                    !skippedValues.has(String(ans)) &&
+                    !/^q5_address/.test(q.id);
+            })
+            .map(q => `• ${q.question_sv}: ${answers[q.id]}`)
+            .join('\n');
+
+        const obs = analysisStep1.image_observations;
+        const projectType = analysisStep1.inferred_project_type || 'room';
+        const sizeM2 = obs?.inferred_size_sqm?.value ?? '?';
+        const visibleElements = (obs?.visible_elements || []).join(', ');
+        const summaryText = obs?.summary_sv || '';
+        const scopeValue = analysisStep1.scope_guess?.value || 'full renovation';
+
+        const prompt = [
+            `Edit the uploaded photo to show the ${projectType} after a complete renovation.`,
+            `CRITICAL: Keep the camera angle, room geometry, perspective, and lighting direction absolutely identical to the original photo.`,
+            `Preserve the exact layout — doors, windows, fixtures, and structural elements must stay in place. Do NOT add, remove, or reposition architectural features.`,
+            `Deliver a photorealistic result that looks like a real photograph of the renovated room. No watermarks, overlays, or showroom-style exaggerations.`,
+            ``,
+            summaryText ? `Current room (AI image analysis): ${summaryText}` : '',
+            visibleElements ? `Visible elements: ${visibleElements}.` : '',
+            `Approximate room size: ${sizeM2} m².`,
+            `Renovation scope: ${scopeValue}.`,
+            description ? `User's renovation description: "${description}"` : '',
+            renovationSpecs ? `\nRenovation specifications from user:\n${renovationSpecs}` : '',
+            `\nApply ALL of these specifications visually in the renovated photo.`,
+        ].filter(Boolean).join('\n');
+
+        console.log(`[GenerateAfterImage] [${requestId}] project=${projectType} quality=${quality} size=${size} image_bytes=${imageBuffer.length} prompt_len=${prompt.length}`);
+
+        // --- Call OpenAI Image Edits API (with one retry on 429 / 5xx) ---
+        const callOpenAI = async (): Promise<{ base64?: string; url?: string }> => {
+            const formData = new FormData();
+            formData.append('model', 'gpt-image-1');
+            formData.append('image', new Blob([new Uint8Array(imageBuffer)], { type: imageMimeType }), imageFilename);
+            formData.append('prompt', prompt);
+            formData.append('n', '1');
+            formData.append('quality', quality);
+            formData.append('size', size);
+            formData.append('output_format', output_format);
+
+            const openAiRes = await fetch('https://api.openai.com/v1/images/edits', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${apiKey}` },
+                body: formData,
+            });
+
+            if (!openAiRes.ok) {
+                const errText = await openAiRes.text().catch(() => openAiRes.statusText);
+                const err: any = new Error(`OpenAI ${openAiRes.status}: ${errText}`);
+                err.openaiStatus = openAiRes.status;
+                throw err;
+            }
+
+            const json = await openAiRes.json() as { data: Array<{ b64_json?: string; url?: string }> };
+            const item = json.data?.[0];
+            return { base64: item?.b64_json, url: item?.url };
+        };
+
+        let result: { base64?: string; url?: string };
+        try {
+            result = await callOpenAI();
+        } catch (err: any) {
+            const s = err.openaiStatus;
+            if (s === 429 || (s >= 500 && s < 600)) {
+                console.warn(`[GenerateAfterImage] [${requestId}] retry after ${s}`);
+                await new Promise(r => setTimeout(r, 1000));
+                result = await callOpenAI();
+            } else {
+                throw err;
+            }
+        }
+
+        const afterImageBase64 = result.base64
+            ? `data:image/${output_format};base64,${result.base64}`
+            : null;
+
+        res.json({
+            after_image_base64: afterImageBase64,
+            after_image_url: result.url || null,
+            output_format,
+            metadata: {
+                model: 'gpt-image-1',
+                quality,
+                size,
+                prompt_preview: prompt.slice(0, 300),
+                request_id: requestId,
+            },
+        });
+
+    } catch (error: any) {
+        console.error(`[GenerateAfterImage] [${requestId}]:`, error.message);
+        const status = error.openaiStatus;
+        if (status && status >= 400 && status < 500) {
+            return res.status(status).json({ error: 'openai_error', details: error.message });
+        }
+        res.status(500).json({ error: 'openai_error', details: error.message });
+    }
+});
+
+/**
+
  * POST /api/ai/offert/reprice
  * Recalculates estimate based on manual overrides and ROT settings.
  */

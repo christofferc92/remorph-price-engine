@@ -365,7 +365,8 @@ router.post('/generate-after-image', async (req, res) => {
                 model: 'gemini-2.0-flash-preview-image-generation',
                 contents: [imagePart, textPart],
                 config: {
-                    responseModalities: ["IMAGE", "TEXT"]
+                    responseModalities: ["IMAGE", "TEXT"],
+                    responseMimeType: "image/png",
                 }
             });
 

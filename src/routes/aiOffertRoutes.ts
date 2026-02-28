@@ -283,8 +283,8 @@ router.post('/generate-after-image', async (req, res) => {
         if (!step1) return sendError(res, 400, 'Missing required field: step1');
         if (!answers) return sendError(res, 400, 'Missing required field: answers');
 
-        const apiKey = process.env.GOOGLE_API_KEY;
-        if (!apiKey) return sendError(res, 500, 'GOOGLE_API_KEY not configured');
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) return sendError(res, 500, 'OPENAI_API_KEY not configured');
 
         // --- Decode before-image to Buffer ---
         let imageBuffer: Buffer;

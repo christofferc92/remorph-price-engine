@@ -347,49 +347,44 @@ router.post('/generate-after-image', async (req, res) => {
 
         console.log(`[GenerateAfterImage] [${requestId}] project=${projectType} quality=${quality} size=${size} image_bytes=${imageBuffer.length} prompt_len=${prompt.length}`);
 
-        // --- Call Gemini Image Generation API (with one retry on 429/5xx) ---
-        const callGemini = async (): Promise<{ base64?: string; url?: string }> => {
-            const { GoogleGenAI } = await import('@google/genai');
-            const ai = new GoogleGenAI({ apiKey });
+        // --- Call OpenAI Image Edits API (with one retry on 429 / 5xx) ---
+        const callOpenAI = async (): Promise<{ base64?: string; url?: string }> => {
+            const formData = new FormData();
+            formData.append('model', 'gpt-image-1');
+            formData.append('image', new Blob([new Uint8Array(imageBuffer)], { type: imageMimeType }), imageFilename);
+            formData.append('prompt', prompt);
+            formData.append('n', '1');
+            formData.append('quality', quality);
+            formData.append('size', size);
+            formData.append('output_format', output_format);
 
-            const imagePart = {
-                inlineData: {
-                    data: imageBuffer.toString('base64'),
-                    mimeType: imageMimeType,
-                }
-            };
-
-            const textPart = prompt;
-
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.0-flash-preview-image-generation',
-                contents: [imagePart, textPart],
-                config: {
-                    responseModalities: ["IMAGE", "TEXT"],
-                    responseMimeType: "image/png",
-                }
+            const openAiRes = await fetch('https://api.openai.com/v1/images/edits', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${apiKey}` },
+                body: formData,
             });
 
-            // Extract base64 image data from the response parts
-            for (const part of response.candidates?.[0]?.content?.parts || []) {
-                if (part.inlineData && part.inlineData.data) {
-                    return { base64: part.inlineData.data };
-                }
+            if (!openAiRes.ok) {
+                const errText = await openAiRes.text().catch(() => openAiRes.statusText);
+                const err: any = new Error(`OpenAI ${openAiRes.status}: ${errText}`);
+                err.openaiStatus = openAiRes.status;
+                throw err;
             }
 
-            throw new Error('Gemini response did not contain inline image data');
+            const json = await openAiRes.json() as { data: Array<{ b64_json?: string; url?: string }> };
+            const item = json.data?.[0];
+            return { base64: item?.b64_json, url: item?.url };
         };
 
         let result: { base64?: string; url?: string };
         try {
-            result = await callGemini();
+            result = await callOpenAI();
         } catch (err: any) {
-            // Error objects from the SDK can vary; try to extract status if available
-            const status = err.status || err.response?.status;
-            if (status === 429 || (status >= 500 && status < 600) || !status) {
-                console.warn(`[GenerateAfterImage] [${requestId}] retry after error: ${err.message}`);
+            const s = err.openaiStatus;
+            if (s === 429 || (s >= 500 && s < 600)) {
+                console.warn(`[GenerateAfterImage] [${requestId}] retry after ${s}`);
                 await new Promise(r => setTimeout(r, 1000));
-                result = await callGemini();
+                result = await callOpenAI();
             } else {
                 throw err;
             }
@@ -404,7 +399,7 @@ router.post('/generate-after-image', async (req, res) => {
             after_image_url: result.url || null,
             output_format,
             metadata: {
-                model: 'gemini-2.0-flash-preview-image-generation',
+                model: 'gpt-image-1',
                 quality,
                 size,
                 prompt_preview: prompt.slice(0, 300),
@@ -414,11 +409,11 @@ router.post('/generate-after-image', async (req, res) => {
 
     } catch (error: any) {
         console.error(`[GenerateAfterImage] [${requestId}]:`, error.message);
-        const status = error.status || error.response?.status;
+        const status = error.openaiStatus;
         if (status && status >= 400 && status < 500) {
-            return res.status(status).json({ error: 'gemini_error', details: error.message });
+            return res.status(status).json({ error: 'openai_error', details: error.message });
         }
-        res.status(500).json({ error: 'gemini_error', details: error.message });
+        res.status(500).json({ error: 'openai_error', details: error.message });
     }
 });
 

@@ -350,7 +350,10 @@ router.post('/generate-after-image', async (req, res) => {
         // --- Call Gemini Image Generation API (with one retry on 429/5xx) ---
         const callGemini = async (): Promise<{ base64?: string; url?: string }> => {
             const { GoogleGenAI } = await import('@google/genai');
-            const ai = new GoogleGenAI({ apiKey });
+            const ai = new GoogleGenAI({
+                apiKey,
+                httpOptions: { apiVersion: 'v1alpha' }
+            });
 
             const imagePart = {
                 inlineData: {
